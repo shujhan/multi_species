@@ -7,4 +7,4 @@ cmake .. -D CMAKE_CXX_COMPILER=nvc++
 
 make
 
-After getting the compiled file farrsight_cpu and farrsight_gpu, use python interface and .sh file to run different jobs.
+After getting the compiled file farrsight_cpu and farrsight_gpu, use python interface and .sh file in standard_interface to run different jobs.
