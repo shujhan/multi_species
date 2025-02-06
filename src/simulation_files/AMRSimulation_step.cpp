@@ -154,7 +154,7 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
         for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
             ef3[xi] *= species_qms[sp_i];
             // k : 3-> 4
-            pk[xi] = ps[xi] + 0.5 * dt * species_qs[sp_i] * ef3[xi];
+            pk[xi] = ps[xi] + dt * species_qs[sp_i] * ef3[xi];
         }
     }
     // k4 = (v4,a4) = F(un + h k3) = F(xn + delt v3, pn + delt f3)
@@ -163,7 +163,14 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
     if (relativistic) {
         relativistic_momentum_push(xk.data(), v4.data(), pk.data());
     } else {
-        nonrelativistic_momentum_push(xk.data(), v4.data(), pk.data());
+        // nonrelativistic_momentum_push(xk.data(), v4.data(), pk.data());
+        for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
+            for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
+                double vi = pk[xi]/ species_ms[sp_i];
+                v4[xi] = vi;
+                xk[xi] += dt * vi;
+            }
+        }
     }
 
     // for (int ii = 0; ii < N; ++ii) {
