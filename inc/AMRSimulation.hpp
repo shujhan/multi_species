@@ -33,6 +33,7 @@ using std::endl;
 #include <string> 
 #include <vector>               // std::vector
 
+
 // external libraries to include
 // #include <Eigen/Dense>
 // using namespace Eigen;
@@ -60,6 +61,7 @@ namespace pt = boost::property_tree;
 //                 eval_time, file_time, amr_test_time, amr_refine_time, last_time};
 
 struct AMRSimulation {
+    std::ofstream outFile;
     std::string sim_dir;
     std::string deck_address;
     // domain parameters

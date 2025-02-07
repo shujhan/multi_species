@@ -3,9 +3,8 @@
 AMRSimulation::AMRSimulation() {}
 
 AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address) 
-    : need_scatter (false)
+    : need_scatter (false), outFile("debug.txt")
 {
-
     this->sim_dir = sim_dir;
     this->deck_address = deck_address;
 
@@ -37,7 +36,6 @@ AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address)
     get_qms();
 
 #if TESTFLAG
-    std::ofstream outFile("debug.txt");
     outFile << "Debugging is enabled!" << std::endl;
     outFile << "All species after loading deck: " << endl;
     for (int i = 0; i < N_sp; i++) {

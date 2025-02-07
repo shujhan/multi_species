@@ -9,6 +9,30 @@ int AMRSimulation::step() {
         gather();
     }
 
+#if TESTFLAG
+    outFile << "After gather, before step" << iter_num << std::endl;
+    outFile << "xs has size:" << xs.size() << ", : " << std::endl;
+    for(int i = 0; i < xs.size(); i++) {
+        outFile << xs[i] << "  ";
+    }
+    outFile << endl;
+    outFile << "ps has size:" << ps.size() << ", : " << std::endl;
+    for(int i = 0; i < ps.size(); i++) {
+        outFile << ps[i] << "  ";
+    }
+    outFile << endl;
+    outFile << "q_ws has size:" << q_ws.size() << ", : " << std::endl;
+    for(int i = 0; i < q_ws.size(); i++) {
+        outFile << q_ws[i] << "  ";
+    }
+    outFile << endl;
+    outFile << "es has size:" << es.size() << ", : " << std::endl;
+    for(int i = 0; i < es.size(); i++) {
+        outFile << es[i] << "  ";
+    }
+    outFile << endl;
+#endif
+
     // rk4 step
     rk4_step(false);
     iter_num += 1;
@@ -50,6 +74,8 @@ int AMRSimulation::step() {
         //                 xtemp_cpy2.data(), q_ws.data(), xtemp_cpy.size());
     }
 
+// TODO Add after remesh print 
+
     // if dump : write to file
     if (iter_num % n_steps_diag == 0) {
         write_to_file();
@@ -80,11 +106,10 @@ void AMRSimulation::nonrelativistic_momentum_push(double* xtemp, double* vtemp, 
 }
 
 int AMRSimulation::rk4_step(bool get_4th_e) {
-
 // initialize rk4 vectors
     std::vector<double> xk = xs;
-    std::vector<double> v1(xs.size()), v2(xs.size()), v3(xs.size()), v4(xs.size() );
-    std::vector<double> pk = ps;
+    std::vector<double> vs(xs.size()), v1(xs.size()), v2(xs.size()), v3(xs.size()), v4(xs.size() );
+    std::vector<double> p1 = ps, p2(xs.size()), p3(xs.size()), p4(xs.size());;
     std::vector<double> ef1 = es, ef2(xs.size()), ef3(xs.size()), ef4(xs.size());
     int N = xs.size();
 
@@ -97,10 +122,13 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
   // v1 = vs = vn
     // calculate_E_mq(a1, xs, xs, q_ws, L, epsilon);
     // v1 = vs;
-    if (relativistic) {
-        relativistic_momentum_push(xk.data(), v1.data(), pk.data());
-    } else {
-        nonrelativistic_momentum_push(xk.data(), v1.data(), pk.data());
+
+    // get vs and v1 from p1
+    for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
+        for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
+            vs[xi] = ps[xi]/ species_ms[sp_i];
+            v1[xi] = vs[xi];
+        }
     }
 
     for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
@@ -108,20 +136,17 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
 
     // k2 = (v2,a2) = F(un + h/2 k1) = F(xn + delt/2 v1, vn + delt/2 a1)
     //              = ( vn + delt a1 / 2, q/m E(xn + delt v1 /2) )
-            ef1[xi] *= species_qs[sp_i];
+            ef1[xi] *= species_qms[sp_i];
 
             // k->2
             // p2.push_back(ps[xi] + 0.5 * dt * ef1[xi]);
-            pk[xi] = ps[xi] + 0.5 * dt * ef1[xi];
+            p2[xi] = ps[xi] + 0.5 * dt * ef1[xi];
+            v2[xi] = p2[xi]/ species_ms[sp_i];
+            xk[xi] = xs[xi] + 0.5 * dt * p1[xi];
         }
     }
     
     // get x2 = xn + delt v1 / 2
-    if (relativistic) {
-        relativistic_momentum_push(xk.data(), v2.data(), pk.data());
-    } else {
-        nonrelativistic_momentum_push(xk.data(), v2.data(), pk.data());
-    }
     
 
     // auto start = high_resolution_clock::now();
@@ -134,19 +159,19 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
     // auto stop = high_resolution_clock::now();
     // add_time(field_time, duration_cast<duration<double>>(stop - start) );
 
-
-    for (size_t sp_i= 0; sp_i < N_sp; ++sp_i) {
+    for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
         for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
-            ef2[xi] *= species_qs[sp_i];
-            // k -> 3
-            pk[xi] = ps[xi] + 0.5 * dt * ef2[xi];
+
+            ef2[xi] *= species_qms[sp_i];
+
+            // k->3
+            p3[xi] = ps[xi] + 0.5 * dt * ef2[xi];
+            v3[xi] = p3[xi]/ species_ms[sp_i];
+            xk[xi] = xs[xi] + 0.5 * dt * p2[xi];
         }
     }
-    if (relativistic) {
-        relativistic_momentum_push(xk.data(), v3.data(), pk.data());
-    } else {
-        nonrelativistic_momentum_push(xk.data(), v3.data(), pk.data());
-    }
+
+
 
 
     // k3 = (v3,a3) = F(un + h/2 k2) = F(xn + delt/2 v2, vn + delt/2 a2)
@@ -171,30 +196,13 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
         for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
             ef3[xi] *= species_qms[sp_i];
             // k : 3-> 4
-            pk[xi] = ps[xi] + dt * species_qs[sp_i] * ef3[xi];
+            p4[xi] = ps[xi] + dt * ef3[xi];
+            v4[xi] = p4[xi]/ species_ms[sp_i];
+            xk[xi] = xs[xi] + dt * p3[xi];
         }
     }
     // k4 = (v4,a4) = F(un + h k3) = F(xn + delt v3, pn + delt f3)
     //              = ( (pn + delt f3) / m, q E(xn + delt v3) )
-
-    if (relativistic) {
-        relativistic_momentum_push(xk.data(), v4.data(), pk.data());
-    } else {
-        // nonrelativistic_momentum_push(xk.data(), v4.data(), pk.data());
-        for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
-            for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
-                double vi = pk[xi]/ species_ms[sp_i];
-                v4[xi] = vi;
-                xk[xi] += ps[xi] + dt * vi;
-            }
-        }
-    }
-
-    // for (int ii = 0; ii < N; ++ii) {
-    //     v4.push_back(vs[ii] + dt * a3[ii]);
-    //     xk[ii] = xs[ii] + dt * v3[ii];
-    // }
-    // start = high_resolution_clock::now();
 
     double t4 = t + dt;
     evaluate_field(ef4, xk, q_ws, t4);
@@ -218,7 +226,7 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
     //                    = pn + delt/6 (a1 + 2 a2 + 2 a3 + a4) )
     // store xn+1, pn+1 in xn,pn
     for (int ii = 0; ii < N; ++ii) {
-        xs[ii] += dt / 6.0 * (v1[ii] + 2 * v2[ii] + 2 * v3[ii] + v4[ii]);
+        xs[ii] += dt / 6.0 * (p1[ii] + 2 * p2[ii] + 2 * p3[ii] + p4[ii]);
         ps[ii] += dt / 6.0 * (ef1[ii] + 2 * ef2[ii] + 2 * ef3[ii] + ef4[ii]);
     }
     if (get_4th_e) {
