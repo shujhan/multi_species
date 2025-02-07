@@ -3,7 +3,7 @@
 // #define DEBUG
 
 int AMRSimulation::step() {
-
+    std::cout << "step " << iter_num + 1 << std::endl;
     if (need_gather) {
         // gather from species (need at first and after every remesh)
         gather();
@@ -11,17 +11,34 @@ int AMRSimulation::step() {
 
     // rk4 step
     rk4_step(false);
-
     iter_num += 1;
     t += dt;
-    std::cout << "step " << iter_num << std::endl;
+
+#if TESTFLAG
+    outFile << "After step" << iter_num << ", but before remesh: " << std::endl;
+    if (need_scatter) {
+        bool send_e = true;
+        scatter(send_e);
+    }
+    for (int i = 0; i < N_sp; i++) {
+        outFile << species_list[i]->species_name << "  , xs:  size = " << species_list[i]->xs.size() << endl;
+        for (int j = 0; j < species_list[i]->xs.size(); j++) {
+            outFile << species_list[i]->xs[j] << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , ps:  size = " << species_list[i]->ps.size() << endl;
+        for (int j = 0; j < species_list[i]->ps.size(); j++) {
+            outFile << species_list[i]->ps[j]  << "  ";
+        }
+    }
+#endif
 
     // if remesh: remesh_and_calculate_e, scatter if needed, set need_gather to true
     if (iter_num % n_steps_remesh == 0) {
-        bool save_Lagrangian = true;
-        if (save_Lagrangian) {
-            write_to_file(true);
-        }
+        // bool save_Lagrangian = true;
+        // if (save_Lagrangian) {
+        //     write_to_file(true);
+        // }
         remesh();
     }
     // if not remesh: evaluate e (remeshing ends by calculating e on uniform grid)
@@ -168,7 +185,7 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
             for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
                 double vi = pk[xi]/ species_ms[sp_i];
                 v4[xi] = vi;
-                xk[xi] += dt * vi;
+                xk[xi] += ps[xi] + dt * vi;
             }
         }
     }

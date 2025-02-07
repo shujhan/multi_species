@@ -12,6 +12,8 @@
 #ifndef AMRSIMULATION_HPP
 #define AMRSIMULATION_HPP
 
+#define TESTFLAG 1 // 1 is to debug
+
 #include <algorithm>            // std::sort, std::copy, std::find
 #include <assert.h>             // assert
 #include <chrono>               // high_resolution _clock, duration_cast, microseconds
