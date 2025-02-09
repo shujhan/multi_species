@@ -27,6 +27,29 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         start_ind += species->reduced_xs.size();
     }
     need_gather = true;
+
+#if TESTFLAG
+    outFile << "Reduced xs and es for each species: " << std::endl;
+    for (int i = 0; i < N_sp; i++) {
+        outFile << species_list[i]->species_name << "  , reduced_xs:  size = " << species_list[i]->reduced_xs.size() << endl;
+        for (int j = 0; j < species_list[i]->reduced_xs.size(); j++) {
+            outFile << species_list[i]->reduced_xs[j]  << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , reduced_ws:  size = " << species_list[i]->reduced_ws.size() << endl;
+        for (int j = 0; j < species_list[i]->reduced_ws.size(); j++) {
+            outFile << species_list[i]->reduced_ws[j]  << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , reduced_es:  size = " << species_list[i]->sort_es.size() << endl;
+        for (int j = 0; j < species_list[i]->sort_es.size(); j++) {
+            outFile << species_list[i]->sort_es[j]  << "  ";
+        }
+        outFile << endl;
+    }
+    // TODO add the general simulation::reduced_es and reduced_xs, reduced_ws
+#endif
+
     return 0;
 }
 

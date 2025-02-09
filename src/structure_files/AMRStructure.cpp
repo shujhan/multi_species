@@ -173,6 +173,11 @@ void AMRStructure::get_reduced_xs_ws() {
 }
 
 void AMRStructure::get_reduced_es(double* reduced_es) {
+    int size = this->reduced_xs.size();
+    sort_es = std::vector<double>(size);
+    for (int i = 0; i < size; i++) {
+        sort_es[i] = reduced_es[i];
+    }
     es = std::vector<double>(xs.size());
     for (int ii = 0; ii < inv_inds_reduced_xs.size(); ++ii) {
         // es.push_back(sort_es[inv_inds[ii]]);

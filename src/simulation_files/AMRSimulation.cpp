@@ -49,6 +49,11 @@ AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address)
             outFile << species_list[i]->ps[j]  << "  ";
         }
         outFile << endl;
+        outFile << species_list[i]->species_name << "  , fs: size = " << species_list[i]->fs.size() << endl;
+        for (int j = 0; j < species_list[i]->fs.size(); j++) {
+            outFile << species_list[i]->fs[j]  << "  ";
+        }
+        outFile << endl;
         outFile << species_list[i]->species_name << "  , q_ws: size = " << species_list[i]->q_ws.size() << endl;
         for (int j = 0; j < species_list[i]->q_ws.size(); j++) {
             outFile << species_list[i]->q_ws[j]  << "  ";
@@ -61,27 +66,6 @@ AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address)
     iter_num = 0;
     t = 0;
     evaluate_field_uniform_grid(t);
-#if TESTFLAG
-    outFile << "Reduced xs and es for each species before RK4: " << std::endl;
-    for (int i = 0; i < N_sp; i++) {
-        outFile << species_list[i]->species_name << "  , reduced_xs:  size = " << species_list[i]->reduced_xs.size() << endl;
-        for (int j = 0; j < species_list[i]->reduced_xs.size(); j++) {
-            outFile << species_list[i]->reduced_xs[j]  << "  ";
-        }
-        outFile << endl;
-        outFile << species_list[i]->species_name << "  , reduced_ws:  size = " << species_list[i]->reduced_ws.size() << endl;
-        for (int j = 0; j < species_list[i]->reduced_ws.size(); j++) {
-            outFile << species_list[i]->reduced_ws[j]  << "  ";
-        }
-        outFile << endl;
-         outFile << species_list[i]->species_name << "  , es:  size = " << species_list[i]->es.size() << endl;
-        for (int j = 0; j < species_list[i]->es.size(); j++) {
-            outFile << species_list[i]->es[j]  << "  ";
-        }
-        outFile << endl;
-    }
-    // TODO add the general simulation::reduced_es and reduced_xs, reduced_ws
-#endif
 
     //write to file
     write_to_file();

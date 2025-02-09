@@ -186,7 +186,7 @@ struct AMRStructure {
 
         // field utility
         std::vector<size_t> inv_inds_reduced_xs;
-        std::vector<double> reduced_xs, reduced_ws;
+        std::vector<double> reduced_xs, reduced_ws, sort_es;
         void get_reduced_xs_ws();
         void get_reduced_es(double* reduced_es);
         // field functions

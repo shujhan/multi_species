@@ -9,29 +9,29 @@ int AMRSimulation::step() {
         gather();
     }
 
-#if TESTFLAG
-    outFile << "After gather, before step" << iter_num << std::endl;
-    outFile << "xs has size:" << xs.size() << ", : " << std::endl;
-    for(int i = 0; i < xs.size(); i++) {
-        outFile << xs[i] << "  ";
-    }
-    outFile << endl;
-    outFile << "ps has size:" << ps.size() << ", : " << std::endl;
-    for(int i = 0; i < ps.size(); i++) {
-        outFile << ps[i] << "  ";
-    }
-    outFile << endl;
-    outFile << "q_ws has size:" << q_ws.size() << ", : " << std::endl;
-    for(int i = 0; i < q_ws.size(); i++) {
-        outFile << q_ws[i] << "  ";
-    }
-    outFile << endl;
-    outFile << "es has size:" << es.size() << ", : " << std::endl;
-    for(int i = 0; i < es.size(); i++) {
-        outFile << es[i] << "  ";
-    }
-    outFile << endl;
-#endif
+// #if TESTFLAG
+//     outFile << "After gather, before step" << iter_num << std::endl;
+//     outFile << "xs has size:" << xs.size() << ", : " << std::endl;
+//     for(int i = 0; i < xs.size(); i++) {
+//         outFile << xs[i] << "  ";
+//     }
+//     outFile << endl;
+//     outFile << "ps has size:" << ps.size() << ", : " << std::endl;
+//     for(int i = 0; i < ps.size(); i++) {
+//         outFile << ps[i] << "  ";
+//     }
+//     outFile << endl;
+//     outFile << "q_ws has size:" << q_ws.size() << ", : " << std::endl;
+//     for(int i = 0; i < q_ws.size(); i++) {
+//         outFile << q_ws[i] << "  ";
+//     }
+//     outFile << endl;
+//     outFile << "es has size:" << es.size() << ", : " << std::endl;
+//     for(int i = 0; i < es.size(); i++) {
+//         outFile << es[i] << "  ";
+//     }
+//     outFile << endl;
+// #endif
 
     // rk4 step
     rk4_step(false);
@@ -54,6 +54,17 @@ int AMRSimulation::step() {
         for (int j = 0; j < species_list[i]->ps.size(); j++) {
             outFile << species_list[i]->ps[j]  << "  ";
         }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , fs:  size = " << species_list[i]->fs.size() << endl;
+        for (int j = 0; j < species_list[i]->fs.size(); j++) {
+            outFile << species_list[i]->fs[j]  << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , es: size = " << species_list[i]->es.size() << endl;
+        for (int j = 0; j < species_list[i]->es.size(); j++) {
+            outFile << species_list[i]->es[j]  << "  ";
+        }    
+        outFile << endl;
     }
 #endif
 
