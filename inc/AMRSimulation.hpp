@@ -12,7 +12,7 @@
 #ifndef AMRSIMULATION_HPP
 #define AMRSIMULATION_HPP
 
-#define TESTFLAG 1 // 1 is to debug
+#define TESTFLAG 0 // 1 is to debug
 
 #include <algorithm>            // std::sort, std::copy, std::find
 #include <assert.h>             // assert

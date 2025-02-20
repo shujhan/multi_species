@@ -107,7 +107,7 @@ void E_MQ_DirectSum::operator() (double* es, double* targets, int nt,
                         double* sources, double* q_ws, int ns)
 {    
     double epsLsq = epsilon * epsilon / L / L;
-    double norm_epsL = sqrt(1.0 + 4.0 * epsLsq );
+    double norm_epsL = sqrt(1 + 4 * epsLsq );
 
 #ifdef OPENACC_ENABLED
 std::cout << "Running with OpenACC" << std::endl;

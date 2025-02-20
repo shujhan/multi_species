@@ -17,10 +17,11 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     std::vector<double> reduced_es(reduced_ws.size());
     (*calculate_e)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(),
                  reduced_xs_cpy.data(), reduced_ws.data(), reduced_xs.size() );
-    if (use_external_field) {
-        (*calculate_e_external)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(), t);
-    }
-    // distribute to each species
+    // if (use_external_field) {
+    //     (*calculate_e_external)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(), t);
+    // }
+
+   // distribute to each species
     size_t start_ind = 0;
     for (auto &species : species_list) {
         species->get_reduced_es(reduced_es.data() + start_ind);
@@ -33,22 +34,40 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     for (int i = 0; i < N_sp; i++) {
         outFile << species_list[i]->species_name << "  , reduced_xs:  size = " << species_list[i]->reduced_xs.size() << endl;
         for (int j = 0; j < species_list[i]->reduced_xs.size(); j++) {
-            outFile << species_list[i]->reduced_xs[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->reduced_xs[j]  << "  ";
         }
         outFile << endl;
         outFile << species_list[i]->species_name << "  , reduced_ws:  size = " << species_list[i]->reduced_ws.size() << endl;
         for (int j = 0; j < species_list[i]->reduced_ws.size(); j++) {
-            outFile << species_list[i]->reduced_ws[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->reduced_ws[j]  << "  ";
         }
         outFile << endl;
         outFile << species_list[i]->species_name << "  , reduced_es:  size = " << species_list[i]->sort_es.size() << endl;
         for (int j = 0; j < species_list[i]->sort_es.size(); j++) {
-            outFile << species_list[i]->sort_es[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->sort_es[j]  << "  ";
+        }
+        outFile << endl;
+
+        outFile << species_list[i]->species_name << "  , general reduced_xs:  size = " << reduced_xs.size() << endl;
+        for (int j = 0; j < reduced_xs.size(); j++) {
+            outFile << setprecision(15) << reduced_xs[j]  << "  ";
+        }
+        outFile << endl;
+
+        outFile << species_list[i]->species_name << "  , general reduced_ws:  size = " << reduced_ws.size() << endl;
+        for (int j = 0; j < reduced_ws.size(); j++) {
+            outFile << setprecision(15) << reduced_ws[j]  << "  ";
+        }
+        outFile << endl;
+
+        outFile << species_list[i]->species_name << "  , e compare to farsight :  size = " << reduced_es.size() << endl;
+        for (int j = 0; j < reduced_es.size(); j++) {
+            outFile << setprecision(15) << reduced_es[j]  << "  ";
         }
         outFile << endl;
     }
-    // TODO add the general simulation::reduced_es and reduced_xs, reduced_ws
 #endif
+
 
     return 0;
 }

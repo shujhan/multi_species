@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <iterator>
-// #include <math.h>
+#include <math.h>
 #include <omp.h>
 #include <iostream>
 using std::cout;

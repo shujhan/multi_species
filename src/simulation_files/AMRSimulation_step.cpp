@@ -47,22 +47,22 @@ int AMRSimulation::step() {
     for (int i = 0; i < N_sp; i++) {
         outFile << species_list[i]->species_name << "  , xs:  size = " << species_list[i]->xs.size() << endl;
         for (int j = 0; j < species_list[i]->xs.size(); j++) {
-            outFile << species_list[i]->xs[j] << "  ";
+            outFile << setprecision(15) << species_list[i]->xs[j] << "  ";
         }
         outFile << endl;
         outFile << species_list[i]->species_name << "  , ps:  size = " << species_list[i]->ps.size() << endl;
         for (int j = 0; j < species_list[i]->ps.size(); j++) {
-            outFile << species_list[i]->ps[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->ps[j]  << "  ";
         }
         outFile << endl;
         outFile << species_list[i]->species_name << "  , fs:  size = " << species_list[i]->fs.size() << endl;
         for (int j = 0; j < species_list[i]->fs.size(); j++) {
-            outFile << species_list[i]->fs[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->fs[j]  << "  ";
         }
         outFile << endl;
         outFile << species_list[i]->species_name << "  , es: size = " << species_list[i]->es.size() << endl;
         for (int j = 0; j < species_list[i]->es.size(); j++) {
-            outFile << species_list[i]->es[j]  << "  ";
+            outFile << setprecision(15) << species_list[i]->es[j]  << "  ";
         }    
         outFile << endl;
     }
@@ -85,7 +85,7 @@ int AMRSimulation::step() {
         //                 xtemp_cpy2.data(), q_ws.data(), xtemp_cpy.size());
     }
 
-// TODO Add after remesh print 
+
 
     // if dump : write to file
     if (iter_num % n_steps_diag == 0) {
