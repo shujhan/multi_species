@@ -94,6 +94,60 @@ void F0_colder_two_stream::print() {
 }
 // end F0_colder_two_stream:: functions
 
+
+// F0_ion_acoustic_electron   functions
+F0_ion_acoustic_electron::F0_ion_acoustic_electron() : pth(1.0), p_str(0.5), k(.5), amp(.1) 
+{
+    maxwellian = F0_M(pth);
+}
+F0_ion_acoustic_electron::F0_ion_acoustic_electron(double pth, double p_str, double k, double amp) 
+    : pth(pth), p_str(p_str), k(k), amp(amp) 
+{
+    maxwellian = F0_M(pth);
+}
+
+double F0_ion_acoustic_electron::operator() (double x, double p) {
+    return (maxwellian(x, p - p_str))* (amp * cos(k * x));
+}
+double F0_ion_acoustic_electron::get_pth() { return pth; }
+double F0_ion_acoustic_electron::get_k() { return k; }
+double F0_ion_acoustic_electron::get_amp() { return amp; }
+void F0_ion_acoustic_electron::print() {
+    cout << "ion_acoustic_electron ics" << endl;
+    cout << "maxwellian(x,p-p_str) * (amp * cos(k*x))" << endl;
+    cout << "pth = " << pth << ", p_str = " << p_str << ", amp = " << amp << ", k = " << k << endl;
+}
+// end F0_ion_acoustic_electron:: functions
+
+
+
+// F0_ion_acoustic_electron   functions
+F0_ion_acoustic_ion::F0_ion_acoustic_ion() : pth(1.0), p_str(0.5), k(.5), amp(.1) , mass(1000)
+{
+    maxwellian = F0_M(pth);
+}
+F0_ion_acoustic_ion::F0_ion_acoustic_ion(double pth, double p_str, double k, double amp, double mass) 
+    : pth(pth), p_str(p_str), k(k), amp(amp), mass(mass)
+{
+    // maxwellian = F0_M(vth);
+    // 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-pstr)*(p-pstr) / 2 / pth /pth);
+}
+
+double F0_ion_acoustic_ion::operator() (double x, double p) {
+    return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth);
+}
+double F0_ion_acoustic_ion::get_pth() { return pth; }
+double F0_ion_acoustic_ion::get_k() { return k; }
+double F0_ion_acoustic_ion::get_amp() { return amp; }
+void F0_ion_acoustic_ion::print() {
+    cout << "ion_acoustic_ion ics" << endl;
+    cout << "sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth)" << endl;
+    cout << "pth = " << pth << ", p_str = " << p_str << ", mass = " << mass << endl;
+}
+// end F0_ion_acoustic_ion:: functions
+
+
+
 //Friedman beam problem functions
 F0_Friedman_beam::F0_Friedman_beam() : Delta(5.522e-8), Tstar(3.463e-7), xmax(0.001)
 {

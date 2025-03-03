@@ -120,6 +120,7 @@ struct AMRSimulation {
     void nonrelativistic_momentum_push(double* xtemp, double* vtemp, double* ptemp);
     int step();
     int rk4_step(bool get_4th_e);
+    int euler();
 
     int remesh();
     int run();

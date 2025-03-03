@@ -7,8 +7,17 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     std::vector<double> reduced_xs, reduced_ws;
     for (auto &species : species_list) {
         species->get_reduced_xs_ws();
-        reduced_xs.insert( reduced_xs.end(), species->reduced_xs.begin(), species->reduced_xs.end());
-        reduced_ws.insert( reduced_ws.end(), species->reduced_ws.begin(), species->reduced_ws.end());
+        // reduced_xs.insert( reduced_xs.end(), species->reduced_xs.begin(), species->reduced_xs.end());
+        // reduced_ws.insert( reduced_ws.end(), species->reduced_ws.begin(), species->reduced_ws.end());
+    }
+
+    reduced_xs.insert(reduced_xs.end(), species_list[0]->reduced_xs.begin(), species_list[0]->reduced_xs.end());
+    reduced_ws.insert(reduced_ws.end(), species_list[0]->reduced_ws.begin(), species_list[0]->reduced_ws.end());
+    for (size_t i = 1; i < species_list.size(); i++) {
+        for (size_t j = 0; j < reduced_ws.size(); j++) {
+            reduced_ws[j] += species_list[i]->reduced_ws[j];
+        }
+       
     }
 
     // duplicate reduced x
@@ -22,10 +31,15 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     // }
 
    // distribute to each species
-    size_t start_ind = 0;
+    // size_t start_ind = 0;
+    // for (auto &species : species_list) {
+    //     species->get_reduced_es(reduced_es.data() + start_ind);
+    //     start_ind += species->reduced_xs.size();
+    // }
+
+    // for uniform mesh, all species has same reduced_es 
     for (auto &species : species_list) {
-        species->get_reduced_es(reduced_es.data() + start_ind);
-        start_ind += species->reduced_xs.size();
+        species->get_reduced_es(reduced_es.data());
     }
     need_gather = true;
 

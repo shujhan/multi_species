@@ -53,7 +53,7 @@ def sim_diagnostics_sample(simulation_dictionary, species, sim_dir = None, test_
     try:
         q = sp_deck['q']
         m = sp_deck['m']
-        qm = sp_deck['qm']
+        # qm = sp_deck['qm']
     except KeyError:
         print('q, m, qm not found in simulation dictionary')
         print ('using default values of -1, 1, -1, respectively')

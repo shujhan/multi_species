@@ -34,7 +34,9 @@ int AMRSimulation::step() {
 // #endif
 
     // rk4 step
-    rk4_step(false);
+    // rk4_step(false);
+    // euler 
+    euler();
     iter_num += 1;
     t += dt;
 
@@ -251,9 +253,26 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
         // stop = high_resolution_clock::now();
         // add_time(field_time, duration_cast<duration<double>>(stop - start) );
     }
-    
 
     need_scatter = true;
-
     return 0;
 }
+
+
+
+int AMRSimulation::euler() {
+    for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
+        for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
+            xs[xi] += dt * ps[xi];
+            es[xi] *= species_qms[sp_i];
+            ps[xi] += dt * es[xi];
+            // ps[xi] = ps[xi] / species_ms[sp_i]; // change to velocity to momentum
+        }
+    }
+    need_scatter = true;
+    return 0;
+}
+
+
+
+

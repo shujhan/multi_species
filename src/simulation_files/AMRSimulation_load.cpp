@@ -139,6 +139,7 @@ distribution* AMRSimulation::make_f0_return_ptr(pt::ptree &species_deck_portion)
     double pth = deck.get<double>("pth", 1.0);//atof(argv[9]);//1.0;
     double pstr = deck.get<double>("pstr", 0.0); //atof(argv[10]);
     int ics_type = deck.get<int>("ics_type", 1);//atoi(argv[6]);
+    double mass = deck.get<double>("m", 1.0); 
     distribution* f0;
     switch (ics_type)
     {
@@ -200,6 +201,15 @@ distribution* AMRSimulation::make_f0_return_ptr(pt::ptree &species_deck_portion)
             }
             f0 = new Relativistic_Wave(amp, wave_beta, pth);
             break;
+
+        case 9: // ion_acoustic_electron
+            f0 = new F0_ion_acoustic_electron(pth, pstr, kx, amp);
+            break;
+
+        case 10: // ion_acoustic_electron
+            f0 = new F0_ion_acoustic_ion(pth, pstr, kx, amp, mass);
+            break;
+
         default:
             cout << "Using default (Landau damping) initial conditions" << endl;
             f0 = new F0_LD(pth, pstr, kx, amp);

@@ -80,6 +80,36 @@ class F0_colder_two_stream : public distribution {
         void print();
 };
 
+class F0_ion_acoustic_electron : public distribution {
+    double pth, p_str, k, amp;
+    F0_M maxwellian;
+    public:
+        F0_ion_acoustic_electron();
+        F0_ion_acoustic_electron(double pth, double p_str, double k, double amp);
+
+        double operator() (double x, double p);
+        double get_pth();
+        double get_k();
+        double get_amp();
+        void print();
+};
+
+class F0_ion_acoustic_ion : public distribution {
+    double pth, p_str, k, amp, mass;
+    F0_M maxwellian;
+    public:
+        F0_ion_acoustic_ion();
+        F0_ion_acoustic_ion(double pth, double p_str, double k, double amp, double mass);
+
+        double operator() (double x, double p);
+        double get_pth();
+        double get_k();
+        double get_amp();
+        void print();
+};
+
+
+
 class F0_Friedman_beam : public distribution {
     double Delta, Tstar, xmax;
     double nhat, k_beta_0, lambda_D, beta_b, gamma_b, x_convert_factor;
