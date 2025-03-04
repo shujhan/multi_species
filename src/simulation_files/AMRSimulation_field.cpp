@@ -9,14 +9,6 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     for (auto &species : species_list) {
         species->get_reduced_xs_ws();
     }
-// uniform case 
-    // reduced_xs.insert(reduced_xs.end(), species_list[0]->reduced_xs.begin(), species_list[0]->reduced_xs.end());
-    // reduced_ws.insert(reduced_ws.end(), species_list[0]->reduced_ws.begin(), species_list[0]->reduced_ws.end());
-    // for (size_t i = 1; i < species_list.size(); i++) {
-    //     for (size_t j = 0; j < reduced_ws.size(); j++) {
-    //         reduced_ws[j] += species_list[i]->reduced_ws[j];
-    //     }
-    // }
 
 // combine all species xs and ws without duplicates
     unordered_set<double> seen; // check unique elements
@@ -53,12 +45,6 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     //     (*calculate_e_external)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(), t);
     // }
 
-   // distribute to each species
-    // size_t start_ind = 0;
-    // for (auto &species : species_list) {
-    //     species->get_reduced_es(reduced_es.data() + start_ind);
-    //     start_ind += species->reduced_xs.size();
-    // }
 
 // For amr, distribute reduced es here to each species
 // then in each species it will distribute again
@@ -71,10 +57,6 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         species->get_reduced_es(this_es.data());
     }
 
-    // for uniform mesh, all species has same reduced_es 
-    // for (auto &species : species_list) {
-    //     species->get_reduced_es(reduced_es.data());
-    // }
     need_gather = true;
 
     for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
@@ -119,8 +101,6 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         outFile << endl;
     }
 #endif
-
-
     return 0;
 }
 

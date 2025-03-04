@@ -34,10 +34,10 @@ int AMRSimulation::step() {
 // #endif
 
     // rk4 step
-    // rk4_step(false);
-    
+    rk4_step(false);
+
     // euler 
-    euler();
+    // euler();
     iter_num += 1;
     t += dt;
 
