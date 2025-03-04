@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.9...3.14)
 project(FARRSIGHT LANGUAGES C CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 11) # 11
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Set the C++ compiler (e.g., NVIDIA's pgc++)

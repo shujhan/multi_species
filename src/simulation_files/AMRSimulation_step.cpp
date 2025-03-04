@@ -35,6 +35,7 @@ int AMRSimulation::step() {
 
     // rk4 step
     // rk4_step(false);
+    
     // euler 
     euler();
     iter_num += 1;

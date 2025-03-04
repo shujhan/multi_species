@@ -185,6 +185,9 @@ struct AMRStructure {
         void interpolate_from_panel_to_points(std::vector<double>& values, std::vector<double>& xs, std::vector<double>& ps,
                                                 std::vector<int>& point_inds, int panel_ind, bool use_limiter, double limit_val);
 
+        // indexing for multi-species, the index in the general reduced xs
+        std::vector<size_t> index_multi;
+        
         // field utility
         std::vector<size_t> inv_inds_reduced_xs;
         std::vector<double> reduced_xs, reduced_ws, sort_es;

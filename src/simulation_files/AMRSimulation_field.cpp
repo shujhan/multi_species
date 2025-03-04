@@ -1,5 +1,6 @@
 #include "AMRSimulation.hpp"
-
+#include <unordered_map>
+#include <unordered_set>
 
 int AMRSimulation::evaluate_field_uniform_grid(double t) {
     // get reduced xs, reduced_ws from each species
@@ -7,17 +8,39 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     std::vector<double> reduced_xs, reduced_ws;
     for (auto &species : species_list) {
         species->get_reduced_xs_ws();
-        // reduced_xs.insert( reduced_xs.end(), species->reduced_xs.begin(), species->reduced_xs.end());
-        // reduced_ws.insert( reduced_ws.end(), species->reduced_ws.begin(), species->reduced_ws.end());
     }
+// uniform case 
+    // reduced_xs.insert(reduced_xs.end(), species_list[0]->reduced_xs.begin(), species_list[0]->reduced_xs.end());
+    // reduced_ws.insert(reduced_ws.end(), species_list[0]->reduced_ws.begin(), species_list[0]->reduced_ws.end());
+    // for (size_t i = 1; i < species_list.size(); i++) {
+    //     for (size_t j = 0; j < reduced_ws.size(); j++) {
+    //         reduced_ws[j] += species_list[i]->reduced_ws[j];
+    //     }
+    // }
 
-    reduced_xs.insert(reduced_xs.end(), species_list[0]->reduced_xs.begin(), species_list[0]->reduced_xs.end());
-    reduced_ws.insert(reduced_ws.end(), species_list[0]->reduced_ws.begin(), species_list[0]->reduced_ws.end());
-    for (size_t i = 1; i < species_list.size(); i++) {
-        for (size_t j = 0; j < reduced_ws.size(); j++) {
-            reduced_ws[j] += species_list[i]->reduced_ws[j];
+// combine all species xs and ws without duplicates
+    unordered_set<double> seen; // check unique elements
+    unordered_map<double, size_t> indexMap; // Map values to indices
+    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
+        for (double val : species_list[this_sp]->reduced_xs) {
+            if (seen.insert(val).second) {
+                indexMap[val] = reduced_xs.size();
+                reduced_xs.push_back(val);
+            }
         }
-       
+    }
+    // store index, index_multi represents the index in the general reduced_xs
+    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
+        for (double val : species_list[this_sp]->reduced_xs) {
+            species_list[this_sp]->index_multi.push_back(indexMap[val]);
+        }
+    }
+    // get reduced_ws 
+    reduced_ws.resize(reduced_xs.size());
+    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
+        for (size_t i = 0; i < species_list[this_sp]->reduced_ws.size(); i++) {
+            reduced_ws[species_list[this_sp]->index_multi[i]] += species_list[this_sp]->reduced_ws[i];
+        }
     }
 
     // duplicate reduced x
@@ -37,11 +60,26 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     //     start_ind += species->reduced_xs.size();
     // }
 
-    // for uniform mesh, all species has same reduced_es 
+// For amr, distribute reduced es here to each species
+// then in each species it will distribute again
     for (auto &species : species_list) {
-        species->get_reduced_es(reduced_es.data());
+        std::vector<double> this_es;
+        // species_list[this_sp]->index_multi
+        for (size_t index : species->index_multi) {
+            this_es.push_back(reduced_es[index]);
+        }
+        species->get_reduced_es(this_es.data());
     }
+
+    // for uniform mesh, all species has same reduced_es 
+    // for (auto &species : species_list) {
+    //     species->get_reduced_es(reduced_es.data());
+    // }
     need_gather = true;
+
+    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
+        species_list[this_sp]->index_multi.clear();
+    }
 
 #if TESTFLAG
     outFile << "Reduced xs and es for each species: " << std::endl;
