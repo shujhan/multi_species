@@ -913,11 +913,9 @@ cluster_list_moments)
 #if OPENACC_ENABLED
                 #pragma acc loop seq
 #endif
-                for (int kk = 0; kk < Pflat; kk++) {
+                for (int kk = 0; kk < Pflat; kk++) {  
                     double s = (p_x - cluster_list_t1[far_index][kk]) / L;
                     s = s - round(s);
-                    // while (s < -0.5) { s += 1.0; }
-                    // while (s >= 0.5) { s -= 1.0; }
                     tempx += cluster_list_moments[far_index][kk] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
                 } // kk
             } // jj
@@ -972,8 +970,6 @@ interaction_list_near_size[0:leaf_count])
                     for (size_t jj = limit_1_c; jj <= limit_2_c; jj++) {
                         double s = (particles_x[ii] - particles_x[jj])/L;
                         s = s - round(s);
-                        // while (s < -0.5) { s += 1.0; }
-                        // while (s >= 0.5) { s -= 1.0; }
                         tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
                     } // jj
                 } // kk

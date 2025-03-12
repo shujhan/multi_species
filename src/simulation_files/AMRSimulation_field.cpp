@@ -10,6 +10,13 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         species->get_reduced_xs_ws();
     }
 
+    // for ions we need multiplay -1 for calculating kernel later, (q_e * f_e) - (q_i*f_i)
+    // so we need to change sigh for ions
+    // maybe dont need 
+    for (auto& f_ion : species_list[1]->reduced_ws) {
+        f_ion *= -1.0;
+    }
+
 // combine all species xs and ws without duplicates
     unordered_set<double> seen; // check unique elements
     unordered_map<double, size_t> indexMap; // Map values to indices
