@@ -10,12 +10,8 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         species->get_reduced_xs_ws();
     }
 
-    // for ions we need multiplay -1 for calculating kernel later, (q_e * f_e) - (q_i*f_i)
-    // so we need to change sigh for ions
-    // maybe dont need 
-    for (auto& f_ion : species_list[1]->reduced_ws) {
-        f_ion *= -1.0;
-    }
+// for two-species, electrons and ions have the same kernel, 
+// the diff in the charge (q_ws) in code
 
 // combine all species xs and ws without duplicates
     unordered_set<double> seen; // check unique elements
@@ -35,12 +31,22 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         }
     }
     // get reduced_ws 
+    // initilze to be all 0 so that can +=
     reduced_ws.resize(reduced_xs.size());
     for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
         for (size_t i = 0; i < species_list[this_sp]->reduced_ws.size(); i++) {
             reduced_ws[species_list[this_sp]->index_multi[i]] += species_list[this_sp]->reduced_ws[i];
         }
     }
+
+
+    // check sizes: 
+    cout << "The final reduced_xs size = " << reduced_xs.size() << endl;
+    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
+        cout << "for the " << this_sp << "th species, its reduced_xs size = " << species_list[this_sp]->reduced_xs.size() << endl;
+    }
+
+
 
     // duplicate reduced x
     std::vector<double> reduced_xs_cpy (reduced_xs);

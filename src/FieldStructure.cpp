@@ -218,6 +218,9 @@ void E_MQ_Treecode::operator() (double* es, double* targets, int nt,
     for (size_t i = 0; i < numpars_s; i++) {
         // particles_x[i] = sources[i];
         particles_x[i] = fmod(sources[i],L);
+        if (particles_x[i] < 0) {
+            // particles_x[i] += L;
+        }
         lambda[i] = q_ws[i];
     }
 
@@ -970,7 +973,7 @@ interaction_list_near_size[0:leaf_count])
                     for (size_t jj = limit_1_c; jj <= limit_2_c; jj++) {
                         double s = (particles_x[ii] - particles_x[jj])/L;
                         s = s - round(s);
-                        tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                        tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);  
                     } // jj
                 } // kk
 

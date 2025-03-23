@@ -98,16 +98,18 @@ void F0_colder_two_stream::print() {
 // F0_ion_acoustic_electron   functions
 F0_ion_acoustic_electron::F0_ion_acoustic_electron() : pth(1.0), p_str(0.5), k(.5), amp(.1) 
 {
-    maxwellian = F0_M(pth);
+    // maxwellian = F0_M(pth);
 }
 F0_ion_acoustic_electron::F0_ion_acoustic_electron(double pth, double p_str, double k, double amp) 
     : pth(pth), p_str(p_str), k(k), amp(amp) 
 {
-    maxwellian = F0_M(pth);
+    // maxwellian = F0_M(pth);
 }
 
 double F0_ion_acoustic_electron::operator() (double x, double p) {
-    return (maxwellian(x, p - p_str)) * (1 + amp * cos(k * x));
+    // return (maxwellian(x, p - p_str)) * (1 + amp * cos(k * x));
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth);
+        // * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_electron::get_pth() { return pth; }
 double F0_ion_acoustic_electron::get_k() { return k; }
@@ -124,7 +126,7 @@ void F0_ion_acoustic_electron::print() {
 // F0_ion_acoustic_electron   functions
 F0_ion_acoustic_ion::F0_ion_acoustic_ion() : pth(1.0), p_str(0.5), k(.5), amp(.1) , mass(1000)
 {
-    maxwellian = F0_M(pth);
+    // maxwellian = F0_M(pth);
 }
 F0_ion_acoustic_ion::F0_ion_acoustic_ion(double pth, double p_str, double k, double amp, double mass) 
     : pth(pth), p_str(p_str), k(k), amp(amp), mass(mass)
@@ -134,7 +136,8 @@ F0_ion_acoustic_ion::F0_ion_acoustic_ion(double pth, double p_str, double k, dou
 }
 
 double F0_ion_acoustic_ion::operator() (double x, double p) {
-    return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth);
+    return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth)
+        * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_ion::get_pth() { return pth; }
 double F0_ion_acoustic_ion::get_k() { return k; }
