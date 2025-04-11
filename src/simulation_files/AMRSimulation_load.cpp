@@ -206,7 +206,7 @@ distribution* AMRSimulation::make_f0_return_ptr(pt::ptree &species_deck_portion)
             f0 = new F0_ion_acoustic_electron(pth, pstr, kx, amp);
             break;
 
-        case 10: // ion_acoustic_electron
+        case 10: // ion_acoustic_ions
             f0 = new F0_ion_acoustic_ion(pth, pstr, kx, amp, mass);
             break;
 

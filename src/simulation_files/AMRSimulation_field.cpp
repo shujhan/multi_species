@@ -32,7 +32,7 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     }
     // get reduced_ws 
     // initilze to be all 0 so that can +=
-    reduced_ws.resize(reduced_xs.size());
+    reduced_ws.assign(reduced_xs.size(), 0);
     for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
         for (size_t i = 0; i < species_list[this_sp]->reduced_ws.size(); i++) {
             reduced_ws[species_list[this_sp]->index_multi[i]] += species_list[this_sp]->reduced_ws[i];
