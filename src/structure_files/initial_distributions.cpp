@@ -108,15 +108,14 @@ F0_ion_acoustic_electron::F0_ion_acoustic_electron(double pth, double p_str, dou
 
 double F0_ion_acoustic_electron::operator() (double x, double p) {
     // return (maxwellian(x, p - p_str)) * (1 + amp * cos(k * x));
-    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth);
-        // * ( 1 + amp * cos(k * x ));
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_electron::get_pth() { return pth; }
 double F0_ion_acoustic_electron::get_k() { return k; }
 double F0_ion_acoustic_electron::get_amp() { return amp; }
 void F0_ion_acoustic_electron::print() {
     cout << "ion_acoustic_electron ics" << endl;
-    cout << "maxwellian(x,p-p_str)" << endl;
+    cout << "1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth) * ( 1 + amp * cos(k * x ))" << endl;
     cout << "pth = " << pth << ", p_str = " << p_str << ", amp = " << amp << ", k = " << k << endl;
     // cout << "pth = " << pth << ", p_str = " << p_str  << endl; 
 }
@@ -137,15 +136,17 @@ F0_ion_acoustic_ion::F0_ion_acoustic_ion(double pth, double p_str, double k, dou
 }
 
 double F0_ion_acoustic_ion::operator() (double x, double p) {
-    return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth)
-        * ( 1 + amp * cos(k * x ));
+    // return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
+    // return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p - amp * 0.091* sin(k * x ))*(p- amp *0.091* sin(k * x )) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_ion::get_pth() { return pth; }
 double F0_ion_acoustic_ion::get_k() { return k; }
 double F0_ion_acoustic_ion::get_amp() { return amp; }
 void F0_ion_acoustic_ion::print() {
     cout << "ion_acoustic_ion ics" << endl;
-    cout << "sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth)* ( 1 + amp * cos(k * x ))" << endl;
+    cout << "1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth)* ( 1 + amp * cos(k * x ))" << endl;
+    // cout << "1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p - amp * 0.091* sin(k * x ))*(p- amp *0.091* sin(k * x )) / 2 / pth /pth) * ( 1 + amp * cos(k * x ))" << endl;
     cout << "pth = " << pth << ", p_str = " << p_str << ", mass = " << mass << ", amp = " << amp << ", k = " << k << endl;
 }
 // end F0_ion_acoustic_ion:: functions

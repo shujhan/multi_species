@@ -146,6 +146,9 @@ int AMRSimulation::rk4_step(bool get_4th_e) {
     }
 
     for (size_t sp_i = 0; sp_i < N_sp; ++sp_i) {
+#if TESTFLAG
+    outFile << "In RK4, the " << sp_i << "th species_qms: " << species_qms[sp_i] << std::endl;
+#endif
         for (size_t xi = species_start[sp_i]; xi < species_end[sp_i]; ++xi) {
 
     // k2 = (v2,a2) = F(un + h/2 k1) = F(xn + delt/2 v1, vn + delt/2 a1)

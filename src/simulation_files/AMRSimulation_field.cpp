@@ -1,6 +1,6 @@
 #include "AMRSimulation.hpp"
-#include <unordered_map>
-#include <unordered_set>
+// #include <unordered_map>
+// #include <unordered_set>
 
 int AMRSimulation::evaluate_field_uniform_grid(double t) {
     // get reduced xs, reduced_ws from each species
@@ -8,37 +8,22 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     std::vector<double> reduced_xs, reduced_ws;
     for (auto &species : species_list) {
         species->get_reduced_xs_ws();
+        reduced_xs.insert( reduced_xs.end(), species->reduced_xs.begin(), species->reduced_xs.end());
+        reduced_ws.insert( reduced_ws.end(), species->reduced_ws.begin(), species->reduced_ws.end());
     }
 
 // for two-species, electrons and ions have the same kernel, 
 // the diff in the charge (q_ws) in code
 
-// combine all species xs and ws without duplicates
-    unordered_set<double> seen; // check unique elements
-    unordered_map<double, size_t> indexMap; // Map values to indices
-    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
-        for (double val : species_list[this_sp]->reduced_xs) {
-            if (seen.insert(val).second) {
-                indexMap[val] = reduced_xs.size();
-                reduced_xs.push_back(val);
-            }
-        }
+    // duplicate reduced x
+    std::vector<double> reduced_xs_cpy (reduced_xs);
+    // evaluate reduced e
+    std::vector<double> reduced_es(reduced_ws.size());
+    (*calculate_e)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(),
+                 reduced_xs_cpy.data(), reduced_ws.data(), reduced_xs.size() );
+    if (use_external_field) {
+        (*calculate_e_external)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(), t);
     }
-    // store index, index_multi represents the index in the general reduced_xs
-    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
-        for (double val : species_list[this_sp]->reduced_xs) {
-            species_list[this_sp]->index_multi.push_back(indexMap[val]);
-        }
-    }
-    // get reduced_ws 
-    // initilze to be all 0 so that can +=
-    reduced_ws.assign(reduced_xs.size(), 0);
-    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
-        for (size_t i = 0; i < species_list[this_sp]->reduced_ws.size(); i++) {
-            reduced_ws[species_list[this_sp]->index_multi[i]] += species_list[this_sp]->reduced_ws[i];
-        }
-    }
-
 
     // check sizes: 
     cout << "The final reduced_xs size = " << reduced_xs.size() << endl;
@@ -47,34 +32,14 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
     }
 
 
-
-    // duplicate reduced x
-    std::vector<double> reduced_xs_cpy (reduced_xs);
-    // evaluate reduced e
-    std::vector<double> reduced_es(reduced_ws.size());
-    (*calculate_e)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(),
-                 reduced_xs_cpy.data(), reduced_ws.data(), reduced_xs.size() );
-    // if (use_external_field) {
-    //     (*calculate_e_external)(reduced_es.data(), reduced_xs.data(), reduced_xs.size(), t);
-    // }
-
-
 // For amr, distribute reduced es here to each species
 // then in each species it will distribute again
+    size_t start_ind = 0;
     for (auto &species : species_list) {
-        std::vector<double> this_es;
-        // species_list[this_sp]->index_multi
-        for (size_t index : species->index_multi) {
-            this_es.push_back(reduced_es[index]);
-        }
-        species->get_reduced_es(this_es.data());
+        species->get_reduced_es(reduced_es.data() + start_ind);
+        start_ind += species->reduced_xs.size();
     }
-
     need_gather = true;
-
-    for (size_t this_sp = 0; this_sp < species_list.size(); this_sp++) {
-        species_list[this_sp]->index_multi.clear();
-    }
 
 #if TESTFLAG
     outFile << "Reduced xs and es for each species: " << std::endl;
