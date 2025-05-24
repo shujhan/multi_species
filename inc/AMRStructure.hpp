@@ -87,7 +87,7 @@ struct AMRStructure {
     std::vector <Panel> panels;
     std::vector <int> leaf_inds;
     // std::vector <Particle> particles;
-    std::vector<double> xs, ps, fs, q_ws, es;
+    std::vector<double> xs, ps, fs, q_ws, es, rho_ws,final_rho;
 
     std::vector <Panel> old_panels;
     std::vector<double> old_xs, old_ps, old_fs;
@@ -190,7 +190,7 @@ struct AMRStructure {
         
         // field utility
         std::vector<size_t> inv_inds_reduced_xs;
-        std::vector<double> reduced_xs, reduced_ws, sort_es;
+        std::vector<double> reduced_xs, reduced_ws, sort_es,reduced_rho;
         void get_reduced_xs_ws();
         void get_reduced_es(double* reduced_es);
         // field functions

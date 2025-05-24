@@ -93,7 +93,7 @@ struct AMRSimulation {
     int N_sp;
     std::vector<size_t> species_start, species_end;
 
-    std::vector<double> xs, ps, q_ws, es;
+    std::vector<double> xs, ps, q_ws, es, rho_ws;
     std::vector<double> species_qs, species_ms, species_qms;
     // ---- functions ---------
     // constructor

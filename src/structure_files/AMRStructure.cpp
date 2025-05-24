@@ -173,8 +173,10 @@ void AMRStructure::get_reduced_xs_ws() {
 
     // std::vector<double> sort_ws (species_reduced_xs.size());
     reduced_ws = std::vector<double> (reduced_xs.size());
+    // reduced_rho = std::vector<double> (reduced_xs.size());
     for (int ii = 0; ii < inv_inds_reduced_xs.size(); ++ii) {
         reduced_ws[inv_inds_reduced_xs[ii]] += q_ws[ii];
+        // reduced_rho[inv_inds_reduced_xs[ii]] += rho_ws[ii];
     }
 }
 
@@ -185,11 +187,12 @@ void AMRStructure::get_reduced_es(double* reduced_es) {
         sort_es[i] = reduced_es[i];
     }
     es = std::vector<double>(xs.size());
+    // final_rho = std::vector<double>(xs.size());
     for (int ii = 0; ii < inv_inds_reduced_xs.size(); ++ii) {
         // es.push_back(sort_es[inv_inds[ii]]);
         es[ii] = reduced_es[inv_inds_reduced_xs[ii]];
+        // final_rho[ii] = reduced_rho[inv_inds_reduced_xs[ii]];
     }
-
 }
 
 

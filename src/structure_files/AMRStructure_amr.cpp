@@ -1087,6 +1087,7 @@ void AMRStructure::set_leaves_weights() {
     //     // particles[ii].q_w = 0;
     // }
     q_ws = std::vector<double> (xs.size());
+    // rho_ws = std::vector<double> (xs.size());
     recursively_set_leaves_weights(0);
 
     // for (int ii = 0; ii < particles.size(); ++ii) {
@@ -1094,6 +1095,7 @@ void AMRStructure::set_leaves_weights() {
     // }
     for (int ii = 0; ii < xs.size(); ++ii) {
         q_ws[ii] *= fs[ii];
+        // rho_ws[ii] *= fs[ii];
     }
 
 }
@@ -1140,6 +1142,11 @@ void AMRStructure::recursively_set_leaves_weights(int panel_ind) {
                 break;
             }
         }
+        // double qdp4 = q*dp/2.0;
+        // double rho_weights[9] = {1.0,2.0,1.0,1.0,2.0,1.0,1.0, 2.0, 1.0};
+        // for (int ii = 0; ii < 9; ii++) {
+        //     rho_ws[panel_it->point_inds[ii]] += qdp4 * rho_weights[ii];
+        // }     
     }
 }
 

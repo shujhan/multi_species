@@ -31,6 +31,36 @@ int AMRSimulation::evaluate_field_uniform_grid(double t) {
         cout << "for the " << this_sp << "th species, its reduced_xs size = " << species_list[this_sp]->reduced_xs.size() << endl;
     }
 
+    // save the general reduce_es to file 
+    std::ofstream reduced_x_file;
+    std::ofstream reduced_e_file;
+    reduced_x_file.open(sim_dir + "simulation_output/"  + "/reduce_xs/xs_" + std::to_string(static_cast<int>(t)), std::ios::out | std::ios::binary); 
+    reduced_e_file.open(sim_dir + "simulation_output/"  + "/reduced_es/es_"  + std::to_string(static_cast<int>(t)), std::ios::out | std::ios::binary);
+
+    std::cout << "#reduced_xs " << reduced_xs.size() << std::endl;
+    std::cout << "#reduced_es " << reduced_es.size() << std::endl;
+
+    if (!reduced_x_file | !reduced_e_file) {
+        cout << "Unable to open reduced_xs data files" << endl;
+        return 1;
+    }
+
+    assert(reduced_xs.size() == reduced_es.size());
+    for (int ii = 0; ii < reduced_xs.size(); ++ii) {
+        double x = reduced_xs[ii];
+        double e = reduced_es[ii];
+        reduced_x_file.write((char *) &x, sizeof(double));
+        reduced_e_file.write((char *) &e, sizeof(double));
+    }
+
+    if (!reduced_x_file.good() | !reduced_e_file.good()) {
+        cout << "Error occurred reduced_xs data files." << endl;
+        return 1;
+    }
+
+    reduced_x_file.close();
+    reduced_e_file.close();
+
 
 // For amr, distribute reduced es here to each species
 // then in each species it will distribute again
