@@ -229,6 +229,10 @@ AMRStructure* AMRSimulation::make_species_return_ptr(pt::ptree &species_deck_por
     double pth = deck.get<double>("pth", 1.0);//atof(argv[9]);//1.0;
     double pstr = deck.get<double>("pstr", 0.0); //atof(argv[10]);
     int sim_type = deck.get<int>("sim_type", 1);//atoi(argv[6]);
+
+    double p_min = deck.get<double>("pmin", -1.0);
+    double p_max = deck.get<double>("pmax",1.0);
+
     double q = deck.get<double>("q", -1.0);
     double m = deck.get<double>("m", 1.0);
     if (sim_type==5) { q = 1.0; }

@@ -127,7 +127,24 @@ std::cout << "Running without OpenACC" << std::endl;
             z = z - round(z);
             // while (z < -0.5) { z += 1.0; }
             // while (z >= 0.5) { z -= 1.0; }
-            ei += q_ws[jj] * (0.5 * z * norm_epsL / sqrt(z * z + epsLsq) - z);
+            // ei += q_ws[jj] * (0.5 * z * norm_epsL / sqrt(z * z + epsLsq) - z);
+
+            if (fabs(z - 0.5) < DBL_MIN || fabs(z + 0.5) < DBL_MIN || fabs(z) < DBL_MIN ) {
+                continue;
+            }
+
+            else if (z < 0.0) {
+                ei += q_ws[jj] * -1.0 * (z + 0.5 * sqrt((z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
+            }
+            else if (z > 0.0){
+                ei += q_ws[jj] * -1.0 * (z - 0.5 * sqrt( (z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
+            }
+            // else {
+            //     ei += q_ws[jj] * 0;
+            // }
+
+
+
         }
         es[ii] = ei;
     }
@@ -919,7 +936,20 @@ cluster_list_moments)
                 for (int kk = 0; kk < Pflat; kk++) {  
                     double s = (p_x - cluster_list_t1[far_index][kk]) / L;
                     s = s - round(s);
-                    tempx += cluster_list_moments[far_index][kk] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                    // tempx += cluster_list_moments[far_index][kk] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                    if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
+                        continue;
+                    }
+                    
+                    else if (s < 0.0) {
+                        tempx += cluster_list_moments[far_index][kk] * -1.0 * (s + 0.5 * sqrt((s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
+                    }
+                    else if (s > 0.0){
+                        tempx += cluster_list_moments[far_index][kk] * -1.0 * (s - 0.5 * sqrt( (s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
+                    }
+                    // else {
+                    //     tempx += cluster_list_moments[far_index][kk] * 0;
+                    // }
                 } // kk
             } // jj
 
@@ -973,7 +1003,20 @@ interaction_list_near_size[0:leaf_count])
                     for (size_t jj = limit_1_c; jj <= limit_2_c; jj++) {
                         double s = (particles_x[ii] - particles_x[jj])/L;
                         s = s - round(s);
-                        tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);  
+                        // tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);  
+                        if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
+                            continue;
+                        }
+                        else if (s < 0.0) {
+                            tempx += lambda[jj] * -1.0 * (s + 0.5 * sqrt((s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
+                        }
+                        else if (s > 0.0){
+                            tempx += lambda[jj] * -1.0 * (s - 0.5 * sqrt( (s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
+                        }
+                        // else {
+                        //     tempx += lambda[jj] * 0;
+                        // }
+                    
                     } // jj
                 } // kk
 
