@@ -130,6 +130,7 @@ struct AMRStructure {
     int write_panels_to_file(int iter_num);
     int write_particles_to_file(bool pre_remesh, int iter_num);
     int write_panels_to_file(bool pre_remesh, int iter_num);
+    int write_e_to_file(bool pre_remesh, int iter_num);
 
     public:
         AMRStructure();

@@ -75,6 +75,7 @@ struct AMRSimulation {
     int num_steps;
     int n_steps_remesh;
     int n_steps_diag;
+    int n_phase_space_diag;
     double dt;
     bool need_scatter;
     bool need_gather;

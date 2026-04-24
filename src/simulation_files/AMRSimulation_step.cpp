@@ -91,7 +91,7 @@ int AMRSimulation::step() {
 
 
     // if dump : write to file
-    if (iter_num % n_steps_diag == 0) {
+    if (iter_num % n_phase_space_diag == 0) {
         write_to_file();
     }
 

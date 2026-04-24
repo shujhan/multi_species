@@ -109,6 +109,9 @@ void E_MQ_DirectSum::operator() (double* es, double* targets, int nt,
     double epsLsq = epsilon * epsilon / L / L;
     double norm_epsL = sqrt(1 + 4 * epsLsq );
 
+    // for linear 
+    double norm_const = 1/sqrt(L*L + 4 * epsilon * epsilon);
+
 #ifdef OPENACC_ENABLED
 std::cout << "Running with OpenACC" << std::endl;
 #pragma acc parallel loop independent
@@ -132,18 +135,20 @@ std::cout << "Running without OpenACC" << std::endl;
             if (fabs(z - 0.5) < DBL_MIN || fabs(z + 0.5) < DBL_MIN || fabs(z) < DBL_MIN ) {
                 continue;
             }
-
-            else if (z < 0.0) {
-                ei += q_ws[jj] * -1.0 * (z + 0.5 * sqrt((z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
-            }
-            else if (z > 0.0){
-                ei += q_ws[jj] * -1.0 * (z - 0.5 * sqrt( (z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
-            }
-            // else {
-            //     ei += q_ws[jj] * 0;
+            // else if (z < 0.0) {
+            //     ei += q_ws[jj] * -1.0 * (z + 0.5 * sqrt((z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
+            // }
+            // else if (z > 0.0){
+            //     ei += q_ws[jj] * -1.0 * (z - 0.5 * sqrt( (z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
             // }
 
+            
+            // ei += q_ws[jj] * -1.0 * z * (1 - sqrt(deno/ (4 * z * z * L * L + 4 * epsilon * epsilon)));
 
+            // linear coorection 
+            else {
+                ei += q_ws[jj] * -1.0 * z * L * (norm_const - 1/sqrt(4 * z * z * L * L + 4 * epsilon * epsilon));
+            }
 
         }
         es[ii] = ei;
@@ -247,6 +252,7 @@ void E_MQ_Treecode::operator() (double* es, double* targets, int nt,
     sq_theta = mac * mac;
     epsLsq = epsilon * epsilon / (L * L);
     norm_epsL = sqrt(1 + 4 * epsLsq);
+    deno = L * L + 4 * epsilon * epsilon;
     N0 = max_source;
 
 #if OPENACC_ENABLED
@@ -940,16 +946,8 @@ cluster_list_moments)
                     if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
                         continue;
                     }
-                    
-                    else if (s < 0.0) {
-                        tempx += cluster_list_moments[far_index][kk] * -1.0 * (s + 0.5 * sqrt((s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
-                    }
-                    else if (s > 0.0){
-                        tempx += cluster_list_moments[far_index][kk] * -1.0 * (s - 0.5 * sqrt( (s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
-                    }
-                    // else {
-                    //     tempx += cluster_list_moments[far_index][kk] * 0;
-                    // }
+                    tempx += cluster_list_moments[far_index][kk] * -1.0 * s * (1 - sqrt(deno/ (4 * s * s * L * L + 4 * epsilon * epsilon)));
+
                 } // kk
             } // jj
 
@@ -1007,15 +1005,8 @@ interaction_list_near_size[0:leaf_count])
                         if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
                             continue;
                         }
-                        else if (s < 0.0) {
-                            tempx += lambda[jj] * -1.0 * (s + 0.5 * sqrt((s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
-                        }
-                        else if (s > 0.0){
-                            tempx += lambda[jj] * -1.0 * (s - 0.5 * sqrt( (s * s * L * L + s * s * 4 * epsilon * epsilon) / (s * s * L * L + epsilon * epsilon)));
-                        }
-                        // else {
-                        //     tempx += lambda[jj] * 0;
-                        // }
+                        tempx += lambda[jj] * -1.0 * s * (1 - sqrt(deno/ (4 * s * s * L * L + 4 * epsilon * epsilon)));
+
                     
                     } // jj
                 } // kk

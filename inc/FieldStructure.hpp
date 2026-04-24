@@ -169,6 +169,7 @@ class E_MQ_Treecode : public ElectricField {
         double sq_theta;
         double norm_epsL;
         double epsLsq;
+        double deno;
         double pi = 3.14159265358979323846;
 
         double* lambda;
