@@ -33,10 +33,11 @@ int AMRSimulation::get_box_t_params(pt::ptree &deck) {
 
     int relativistic_int = deck.get<int>("relativistic", 0);
     relativistic = (relativistic_int > 0);
-    num_steps = deck.get<int>("num_steps", 10);//atoi(argv[19]);//120;
-    n_steps_remesh = deck.get<int>("remesh_period", 1); //atoi(argv[20]);
-    n_steps_diag = deck.get<int>("diag_period", 1); //atoi(argv[21]);
-    dt = deck.get<double> ("dt", 0.5); //atof(argv[22]);//0.5;
+    num_steps = deck.get<int>("num_steps", 10);
+    n_steps_remesh = deck.get<int>("remesh_period", 1); 
+    n_steps_diag = deck.get<int>("diag_period", 1); 
+    n_phase_space_diag = deck.get<int>("diag_phase_space_period", 1);
+    dt = deck.get<double> ("dt", 0.5); 
 
     return 0;
 }
@@ -45,13 +46,13 @@ ElectricField* AMRSimulation::make_field_return_ptr(pt::ptree &deck) {
     
     ElectricField* calculate_e;
 
-    double greens_epsilon = deck.get<double>("greens_epsilon",0.2);//atof(argv[12]);//0.2;
-    int use_treecode = deck.get<int>("use_treecode", 0); //atoi(argv[13]);
-    double beta = deck.get<double>("beta", -1.0); //atof(argv[14]);
-    double mac = deck.get<double>("mac", -1.0); //atof(argv[15]);
-    int degree = deck.get<int>("degree", -1); //atoi(argv[16]);
-    int max_source = deck.get<int>("max_source", 2000); //atoi(argv[17]);
-    int max_target = deck.get<int>("max_target", 2000); //atoi(argv[18]);
+    double greens_epsilon = deck.get<double>("greens_epsilon",0.2);
+    int use_treecode = deck.get<int>("use_treecode", 0); 
+    double beta = deck.get<double>("beta", -1.0); 
+    double mac = deck.get<double>("mac", -1.0); 
+    int degree = deck.get<int>("degree", -1); 
+    int max_source = deck.get<int>("max_source", 2000); 
+    int max_target = deck.get<int>("max_target", 2000); 
     
     if (use_treecode > 0) {
         if (bcs!=periodic_bcs) { // open_bcs
@@ -139,6 +140,7 @@ distribution* AMRSimulation::make_f0_return_ptr(pt::ptree &species_deck_portion)
     double pth = deck.get<double>("pth", 1.0);//atof(argv[9]);//1.0;
     double pstr = deck.get<double>("pstr", 0.0); //atof(argv[10]);
     int ics_type = deck.get<int>("ics_type", 1);//atoi(argv[6]);
+    double mass = deck.get<double>("m", 1.0); 
     distribution* f0;
     switch (ics_type)
     {
@@ -200,6 +202,15 @@ distribution* AMRSimulation::make_f0_return_ptr(pt::ptree &species_deck_portion)
             }
             f0 = new Relativistic_Wave(amp, wave_beta, pth);
             break;
+
+        case 9: // ion_acoustic_electron
+            f0 = new F0_ion_acoustic_electron(pth, pstr, kx, amp);
+            break;
+
+        case 10: // ion_acoustic_ions
+            f0 = new F0_ion_acoustic_ion(pth, pstr, kx, amp, mass);
+            break;
+
         default:
             cout << "Using default (Landau damping) initial conditions" << endl;
             f0 = new F0_LD(pth, pstr, kx, amp);
@@ -219,6 +230,10 @@ AMRStructure* AMRSimulation::make_species_return_ptr(pt::ptree &species_deck_por
     double pth = deck.get<double>("pth", 1.0);//atof(argv[9]);//1.0;
     double pstr = deck.get<double>("pstr", 0.0); //atof(argv[10]);
     int sim_type = deck.get<int>("sim_type", 1);//atoi(argv[6]);
+
+    double p_min = deck.get<double>("pmin", -1.0);
+    double p_max = deck.get<double>("pmax",1.0);
+
     double q = deck.get<double>("q", -1.0);
     double m = deck.get<double>("m", 1.0);
     if (sim_type==5) { q = 1.0; }

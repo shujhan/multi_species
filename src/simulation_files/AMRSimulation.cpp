@@ -3,9 +3,8 @@
 AMRSimulation::AMRSimulation() {}
 
 AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address) 
-    : need_scatter (false)
+    : need_scatter (false), outFile("debug.txt")
 {
-
     this->sim_dir = sim_dir;
     this->deck_address = deck_address;
 
@@ -35,6 +34,33 @@ AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address)
     }
     N_sp = species_list.size();
     get_qms();
+
+#if TESTFLAG
+    outFile << "Debugging is enabled!" << std::endl;
+    outFile << "All species after loading deck: " << endl;
+    for (int i = 0; i < N_sp; i++) {
+        outFile << species_list[i]->species_name << "  , xs:  size = " << species_list[i]->xs.size() << endl;
+        for (int j = 0; j < species_list[i]->xs.size(); j++) {
+            outFile << species_list[i]->xs[j] << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , ps:  size = " << species_list[i]->ps.size() << endl;
+        for (int j = 0; j < species_list[i]->ps.size(); j++) {
+            outFile << species_list[i]->ps[j]  << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , fs: size = " << species_list[i]->fs.size() << endl;
+        for (int j = 0; j < species_list[i]->fs.size(); j++) {
+            outFile << species_list[i]->fs[j]  << "  ";
+        }
+        outFile << endl;
+        outFile << species_list[i]->species_name << "  , q_ws: size = " << species_list[i]->q_ws.size() << endl;
+        for (int j = 0; j < species_list[i]->q_ws.size(); j++) {
+            outFile << species_list[i]->q_ws[j]  << "  ";
+        }
+        outFile << endl;
+    }
+#endif
 
     // initialize e
     iter_num = 0;

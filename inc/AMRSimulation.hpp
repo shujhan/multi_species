@@ -12,6 +12,8 @@
 #ifndef AMRSIMULATION_HPP
 #define AMRSIMULATION_HPP
 
+#define TESTFLAG 0 // 1 is to debug
+
 #include <algorithm>            // std::sort, std::copy, std::find
 #include <assert.h>             // assert
 #include <chrono>               // high_resolution _clock, duration_cast, microseconds
@@ -30,6 +32,7 @@ using std::endl;
 #include <stdio.h>              // printf
 #include <string> 
 #include <vector>               // std::vector
+
 
 // external libraries to include
 // #include <Eigen/Dense>
@@ -58,6 +61,7 @@ namespace pt = boost::property_tree;
 //                 eval_time, file_time, amr_test_time, amr_refine_time, last_time};
 
 struct AMRSimulation {
+    std::ofstream outFile;
     std::string sim_dir;
     std::string deck_address;
     // domain parameters
@@ -71,6 +75,7 @@ struct AMRSimulation {
     int num_steps;
     int n_steps_remesh;
     int n_steps_diag;
+    int n_phase_space_diag;
     double dt;
     bool need_scatter;
     bool need_gather;
@@ -89,7 +94,7 @@ struct AMRSimulation {
     int N_sp;
     std::vector<size_t> species_start, species_end;
 
-    std::vector<double> xs, ps, q_ws, es;
+    std::vector<double> xs, ps, q_ws, es, rho_ws;
     std::vector<double> species_qs, species_ms, species_qms;
     // ---- functions ---------
     // constructor
@@ -116,6 +121,7 @@ struct AMRSimulation {
     void nonrelativistic_momentum_push(double* xtemp, double* vtemp, double* ptemp);
     int step();
     int rk4_step(bool get_4th_e);
+    int euler();
 
     int remesh();
     int run();

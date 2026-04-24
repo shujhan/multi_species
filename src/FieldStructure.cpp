@@ -107,7 +107,10 @@ void E_MQ_DirectSum::operator() (double* es, double* targets, int nt,
                         double* sources, double* q_ws, int ns)
 {    
     double epsLsq = epsilon * epsilon / L / L;
-    double norm_epsL = sqrt(1.0 + 4.0 * epsLsq );
+    double norm_epsL = sqrt(1 + 4 * epsLsq );
+
+    // for linear 
+    double norm_const = 1/sqrt(L*L + 4 * epsilon * epsilon);
 
 #ifdef OPENACC_ENABLED
 std::cout << "Running with OpenACC" << std::endl;
@@ -127,7 +130,26 @@ std::cout << "Running without OpenACC" << std::endl;
             z = z - round(z);
             // while (z < -0.5) { z += 1.0; }
             // while (z >= 0.5) { z -= 1.0; }
-            ei += q_ws[jj] * (0.5 * z * norm_epsL / sqrt(z * z + epsLsq) - z);
+            // ei += q_ws[jj] * (0.5 * z * norm_epsL / sqrt(z * z + epsLsq) - z);
+
+            if (fabs(z - 0.5) < DBL_MIN || fabs(z + 0.5) < DBL_MIN || fabs(z) < DBL_MIN ) {
+                continue;
+            }
+            // else if (z < 0.0) {
+            //     ei += q_ws[jj] * -1.0 * (z + 0.5 * sqrt((z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
+            // }
+            // else if (z > 0.0){
+            //     ei += q_ws[jj] * -1.0 * (z - 0.5 * sqrt( (z * z * L * L + z * z * 4 * epsilon * epsilon) / (z * z * L * L + epsilon * epsilon)));
+            // }
+
+            
+            // ei += q_ws[jj] * -1.0 * z * (1 - sqrt(deno/ (4 * z * z * L * L + 4 * epsilon * epsilon)));
+
+            // linear coorection 
+            else {
+                ei += q_ws[jj] * -1.0 * z * L * (norm_const - 1/sqrt(4 * z * z * L * L + 4 * epsilon * epsilon));
+            }
+
         }
         es[ii] = ei;
     }
@@ -218,6 +240,9 @@ void E_MQ_Treecode::operator() (double* es, double* targets, int nt,
     for (size_t i = 0; i < numpars_s; i++) {
         // particles_x[i] = sources[i];
         particles_x[i] = fmod(sources[i],L);
+        if (particles_x[i] < 0) {
+            // particles_x[i] += L;
+        }
         lambda[i] = q_ws[i];
     }
 
@@ -227,6 +252,7 @@ void E_MQ_Treecode::operator() (double* es, double* targets, int nt,
     sq_theta = mac * mac;
     epsLsq = epsilon * epsilon / (L * L);
     norm_epsL = sqrt(1 + 4 * epsLsq);
+    deno = L * L + 4 * epsilon * epsilon;
     N0 = max_source;
 
 #if OPENACC_ENABLED
@@ -913,12 +939,15 @@ cluster_list_moments)
 #if OPENACC_ENABLED
                 #pragma acc loop seq
 #endif
-                for (int kk = 0; kk < Pflat; kk++) {
+                for (int kk = 0; kk < Pflat; kk++) {  
                     double s = (p_x - cluster_list_t1[far_index][kk]) / L;
                     s = s - round(s);
-                    // while (s < -0.5) { s += 1.0; }
-                    // while (s >= 0.5) { s -= 1.0; }
-                    tempx += cluster_list_moments[far_index][kk] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                    // tempx += cluster_list_moments[far_index][kk] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                    if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
+                        continue;
+                    }
+                    tempx += cluster_list_moments[far_index][kk] * -1.0 * s * (1 - sqrt(deno/ (4 * s * s * L * L + 4 * epsilon * epsilon)));
+
                 } // kk
             } // jj
 
@@ -972,9 +1001,13 @@ interaction_list_near_size[0:leaf_count])
                     for (size_t jj = limit_1_c; jj <= limit_2_c; jj++) {
                         double s = (particles_x[ii] - particles_x[jj])/L;
                         s = s - round(s);
-                        // while (s < -0.5) { s += 1.0; }
-                        // while (s >= 0.5) { s -= 1.0; }
-                        tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);
+                        // tempx += lambda[jj] * (0.5 * s * norm_epsL / sqrt(s * s + epsLsq) - s);  
+                        if (fabs(s - 0.5) < DBL_MIN || fabs(s + 0.5) < DBL_MIN || fabs(s) < DBL_MIN ) {
+                            continue;
+                        }
+                        tempx += lambda[jj] * -1.0 * s * (1 - sqrt(deno/ (4 * s * s * L * L + 4 * epsilon * epsilon)));
+
+                    
                     } // jj
                 } // kk
 

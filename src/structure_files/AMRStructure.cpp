@@ -44,6 +44,8 @@ AMRStructure::AMRStructure(std::string sim_dir,std::string species_name,
     bool is_initial_step = true;
     
     generate_mesh([&](double x, double p) { return (*f0)(x,p); }, do_adaptively_refine, is_initial_step);
+    f_beyond_boundary = *std::min_element(fs.begin(), fs.end() );
+    cout << "extrapolating value is " << f_beyond_boundary << endl;
 }
 
         // AMRStructure(std::string sim_dir, distribution* f0, //std::function<double (double,double)>& f0, 
@@ -82,6 +84,8 @@ AMRStructure::AMRStructure(std::string sim_dir, std::string species_name,
     bool is_initial_step = true;
     generate_mesh([&](double x, double p) { return (*f0)(x,p); }, do_adaptively_refine, is_initial_step);
     // calculate_e = new E_MQ_DirectSum(Lx, greens_epsilon);
+    f_beyond_boundary = *std::min_element(fs.begin(), fs.end() );
+    cout << "extrapolating value is " << f_beyond_boundary << endl;
 }
 
 AMRStructure::AMRStructure(std::string sim_dir, std::string species_name,
@@ -117,6 +121,8 @@ AMRStructure::AMRStructure(std::string sim_dir, std::string species_name,
     bool is_initial_step = true;
     generate_mesh([&](double x, double p) { return (*f0)(x,p); }, do_adaptively_refine, is_initial_step);
     // calculate_e = new E_MQ_DirectSum(Lx, greens_epsilon);
+    f_beyond_boundary = *std::min_element(fs.begin(), fs.end() );
+    cout << "extrapolating value is " << f_beyond_boundary << endl;
 }
 //end constructors
 
@@ -167,18 +173,26 @@ void AMRStructure::get_reduced_xs_ws() {
 
     // std::vector<double> sort_ws (species_reduced_xs.size());
     reduced_ws = std::vector<double> (reduced_xs.size());
+    // reduced_rho = std::vector<double> (reduced_xs.size());
     for (int ii = 0; ii < inv_inds_reduced_xs.size(); ++ii) {
         reduced_ws[inv_inds_reduced_xs[ii]] += q_ws[ii];
+        // reduced_rho[inv_inds_reduced_xs[ii]] += rho_ws[ii];
     }
 }
 
 void AMRStructure::get_reduced_es(double* reduced_es) {
+    int size = this->reduced_xs.size();
+    sort_es = std::vector<double>(size);
+    for (int i = 0; i < size; i++) {
+        sort_es[i] = reduced_es[i];
+    }
     es = std::vector<double>(xs.size());
+    // final_rho = std::vector<double>(xs.size());
     for (int ii = 0; ii < inv_inds_reduced_xs.size(); ++ii) {
         // es.push_back(sort_es[inv_inds[ii]]);
         es[ii] = reduced_es[inv_inds_reduced_xs[ii]];
+        // final_rho[ii] = reduced_rho[inv_inds_reduced_xs[ii]];
     }
-
 }
 
 

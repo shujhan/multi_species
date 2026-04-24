@@ -196,9 +196,9 @@ if __name__ == '__main__':
         for species in sd['species_list']:
             sp_name = species['name']
             dp.sim_diagnostics_sample(simulation_dictionary, sp_name, sim_dir=sim_dir)
-            if FST.ICsType(species['ics_type']) is not FST.ICsType.FRIEDMAN_BEAM:
+            # if FST.ICsType(species['ics_type']) is not FST.ICsType.FRIEDMAN_BEAM:
                 # phase.plot_phase_space(sim_dir, simulation_dictionary, int(45.0 / simulation_dictionary['dt']/simulation_dictionary['diag_period']), FST.sim_type_to_flim[FST.SimType(simulation_dictionary['sim_type'])])
-                phase.plot_phase_space(sim_dir, simulation_dictionary, sp_name, final_iter, FST.ics_type_to_flim(FST.ICsType(species['ics_type'])))
+                # phase.plot_phase_space(sim_dir, simulation_dictionary, sp_name, final_iter, FST.ics_type_to_flim(FST.ICsType(species['ics_type'])))
             if args.show_panels or args.panels_movie:
                 panel_height.plot_height(sim_dir, sd, sp_name, final_iter)
 
@@ -243,6 +243,10 @@ if __name__ == '__main__':
                 flim = (0,0.45)
             elif icstype == 4:
                 flim = (0,0.8)
+            elif icstype == 9: # electrons
+                flim = (0,0.3)
+            elif icstype == 10: # ions
+                flim = (0,12)
             do_show_panels = False
             phase.phase_movie(sim_dir, simulation_dictionary, sp_name, do_show_panels, flim=flim, can_do_movie=can_do_movie)
             if args.show_panels:
@@ -277,9 +281,15 @@ if __name__ == '__main__':
                 flim = (0,0.45)
             elif icstype == 4:
                 flim = (0,0.8)
+            elif icstype == 9: # electrons
+                flim = (0,0.3)
+            elif icstype == 10: # ions
+                flim = (0,12)
             # for step 60: we want t = 0, 3, 9 27,36,40,50,55,60, using dt = 0.25
             # the corresponding time step is 0, 12,36,108,144,160,200,220,240
-            for timestep in [0, 12,36,108,144,160,200,220,240]:
+
+            # step 400 with dt = 0.1
+            for timestep in [0, 40,80,120,160,200,240,280,320,360,400]:
                 phase.plot_phase_space(sim_dir, simulation_dictionary, sp_name, timestep, flim=flim)
 
 

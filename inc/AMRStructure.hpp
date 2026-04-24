@@ -87,7 +87,7 @@ struct AMRStructure {
     std::vector <Panel> panels;
     std::vector <int> leaf_inds;
     // std::vector <Particle> particles;
-    std::vector<double> xs, ps, fs, q_ws, es;
+    std::vector<double> xs, ps, fs, q_ws, es, rho_ws,final_rho;
 
     std::vector <Panel> old_panels;
     std::vector<double> old_xs, old_ps, old_fs;
@@ -97,6 +97,7 @@ struct AMRStructure {
     // InterpolateDistribution interp_f;
     // interpolation parameters
     bool allow_boundary_extrapolation = false;
+    double f_beyond_boundary = 0;
     // bool do_unshear = false;
     bool do_unshear = false;
     // bool sqrt_f = false;
@@ -129,6 +130,7 @@ struct AMRStructure {
     int write_panels_to_file(int iter_num);
     int write_particles_to_file(bool pre_remesh, int iter_num);
     int write_panels_to_file(bool pre_remesh, int iter_num);
+    int write_e_to_file(bool pre_remesh, int iter_num);
 
     public:
         AMRStructure();
@@ -184,9 +186,12 @@ struct AMRStructure {
         void interpolate_from_panel_to_points(std::vector<double>& values, std::vector<double>& xs, std::vector<double>& ps,
                                                 std::vector<int>& point_inds, int panel_ind, bool use_limiter, double limit_val);
 
+        // indexing for multi-species, the index in the general reduced xs
+        std::vector<size_t> index_multi;
+        
         // field utility
         std::vector<size_t> inv_inds_reduced_xs;
-        std::vector<double> reduced_xs, reduced_ws;
+        std::vector<double> reduced_xs, reduced_ws, sort_es,reduced_rho;
         void get_reduced_xs_ws();
         void get_reduced_es(double* reduced_es);
         // field functions

@@ -6,7 +6,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem-per-cpu=120G
 #SBATCH --cpus-per-task=1
-#SBATCH --time=03:00:00
+#SBATCH --time=20:00:00
 #SBATCH --account=krasny0
 #SBATCH --partition=standard
 

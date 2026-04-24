@@ -9,8 +9,9 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     std::ofstream x_file;
     std::ofstream p_file;
     std::ofstream f_file;
-    std::ofstream qw_file;
-    std::ofstream e_file;
+    // std::ofstream qw_file;
+    // std::ofstream e_file;
+
 
     std::string remesh_str = "";
     if (pre_remesh) {
@@ -20,16 +21,16 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     x_file.open(sim_dir + "simulation_output/" + species_name + "/xs/xs_" + remesh_str + std::to_string(iter_num), std::ios::out | std::ios::binary); 
     p_file.open(sim_dir + "simulation_output/" + species_name + "/ps/ps_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
     f_file.open(sim_dir + "simulation_output/" + species_name + "/fs/fs_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
-    qw_file.open(sim_dir + "simulation_output/" + species_name + "/qws/qws_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
-    e_file.open(sim_dir + "simulation_output/" + species_name + "/es/es_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
+    // qw_file.open(sim_dir + "simulation_output/" + species_name + "/qws/qws_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
+    // e_file.open(sim_dir + "simulation_output/" + species_name + "/es/es_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
 
     std::cout << "#xs " << xs.size() << std::endl;
     std::cout << "#ps " << ps.size() << std::endl;
     std::cout << "#fs " << fs.size() << std::endl;
-    std::cout << "#qw " << q_ws.size() << std::endl;
-    std::cout << "#es " << es.size() << std::endl;
+    // std::cout << "#qw " << q_ws.size() << std::endl;
+    // std::cout << "#es " << es.size() << std::endl;
 
-    if (!x_file | !p_file | !f_file | !qw_file | !e_file ) {
+    if (!x_file | !p_file | !f_file) {
         cout << "Unable to open step " << iter_num << " particle data files" << endl;
         return 1;
     }
@@ -38,36 +39,30 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     // copy(particles.begin(), particles.end(), std::ostreambuf_iterator<char>(out_file));
 
     // for (int ii = 0; ii < particles.size(); ++ii){
-    assert(xs.size() == ps.size() && ps.size() == fs.size() && fs.size() == q_ws.size() && q_ws.size() == es.size());
+    assert(xs.size() == ps.size() && ps.size() == fs.size());
     for (int ii = 0; ii < xs.size(); ++ii) {
-        // double x = particles[ii].get_x();
-        // double p = particles[ii].get_p();
-        // double f = particles[ii].get_f();
-        // double qw = particles[ii].get_qw();
-        // double e = particles[ii].get_e();
         double x = xs[ii];
         double p = ps[ii];
         double f = fs[ii];
-        double qw = q_ws[ii];
-        double e = es[ii];
+        // double e = es[ii];
+        // double rho = final_rho[ii];
         x_file.write((char *) &x, sizeof(double));
         p_file.write((char *) &p, sizeof(double));
         f_file.write((char *) &f, sizeof(double));
-        qw_file.write((char *) &qw, sizeof(double));
-        e_file.write((char *) &e, sizeof(double));
+        // e_file.write((char *) &e, sizeof(double));
+        // rho_file.write((char *) &rho, sizeof(double));
     }
 
-    if (!x_file.good() | !p_file.good() | !f_file.good() | !qw_file.good() | !e_file.good()) {
+    if (!x_file.good() | !p_file.good() | !f_file.good()) {
         cout << "Error occurred writing step " << iter_num << " particle data files." << endl;
         return 1;
     }
     x_file.close();
     p_file.close();
     f_file.close();
-    qw_file.close();
-    e_file.close();
+    // e_file.close();
+    // rho_file.close();
     // cout << "Successfully wrote step " << iter_num << " particle data files" << endl;
-
     return 0;
 }
 
@@ -105,10 +100,48 @@ int AMRStructure::write_panels_to_file(bool pre_remesh, int iter_num) {
     return 0;
 }
 
+int AMRStructure::write_e_to_file(bool pre_remesh, int iter_num) {
+    std::ofstream x_file;
+    std::ofstream e_file;
+
+    std::string remesh_str = "";
+    if (pre_remesh) {
+        remesh_str = "preremesh_";
+    }
+    x_file.open(sim_dir + "simulation_output/" + species_name + "/xs/xs_" + remesh_str + std::to_string(iter_num), std::ios::out | std::ios::binary); 
+    e_file.open(sim_dir + "simulation_output/" + species_name + "/es/es_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
+    std::cout << "#xs " << xs.size() << std::endl;
+    std::cout << "#es " << es.size() << std::endl;
+
+    if (!e_file | !x_file) {
+        cout << "Unable to open step " << iter_num << " particle data files" << endl;
+        return 1;
+    }
+
+    for (int ii = 0; ii < xs.size(); ++ii) {
+        double x = xs[ii];
+        double e = es[ii];
+        x_file.write((char *) &x, sizeof(double));
+        e_file.write((char *) &e, sizeof(double));
+    }
+
+    if (!x_file.good() | !e_file.good()) {
+        cout << "Error occurred writing step " << iter_num << " particle data files." << endl;
+        return 1;
+    }
+    e_file.close();
+    x_file.close();
+    return 0;
+}
+
+
+
 int AMRStructure::write_to_file(int iter_num) { 
     bool pre_remesh=false;
     return write_to_file(pre_remesh, iter_num);
 }
+
+
 int AMRStructure::write_to_file(bool pre_remesh, int iter_num) {
     write_particles_to_file(pre_remesh, iter_num);
     write_panels_to_file(pre_remesh, iter_num);

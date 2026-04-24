@@ -798,7 +798,7 @@ void AMRStructure::interpolate_from_panel_to_points(
 {
     if (panel_ind == 0) { // if we are extrapolating beyond boundaries; assume 0
         for (int ii = 0; ii < point_inds.size(); ++ii) {
-            values[point_inds[ii]] = 0;
+            values[point_inds[ii]] = f_beyond_boundary;
         }
     }
     else {
@@ -963,7 +963,7 @@ cout << "unshear xs[" << ii << "] " << xs[ii] << ", dt " << dt << ", ps[ii] " <<
 
         if (use_limiter) {
             for (int ii = 0; ii < values.size(); ++ii) {
-                if (values[ii] < 0) { values[ii] = limit_val; }
+                if (values[ii] < 0) { values[ii] = 0; }
             }
         }
     }
@@ -975,7 +975,7 @@ cout << "unshear xs[" << ii << "] " << xs[ii] << ", dt " << dt << ", ps[ii] " <<
 }
 
 double AMRStructure::interpolate_from_panel(double x, double p, int panel_ind, bool verbose) {
-    if (panel_ind == 0) { return 0.0; }
+    if (panel_ind == 0) { return f_beyond_boundary; }
     else {
         Panel* panel = &(old_panels[panel_ind]);
         const int* point_inds = panel->point_inds;
