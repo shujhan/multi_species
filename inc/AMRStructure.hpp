@@ -132,6 +132,13 @@ struct AMRStructure {
     int write_panels_to_file(bool pre_remesh, int iter_num);
     int write_e_to_file(bool pre_remesh, int iter_num);
 
+    // ---- restart: dump full panel tree (not just leaves) ----
+    int write_panel_tree_to_file(int iter_num);
+ 
+    // ---- restart: load methods ----
+    int load_particles_from_file(int iter_num);
+    int load_panel_tree_from_file(int iter_num);
+
     public:
         AMRStructure();
         AMRStructure(std::string sim_dir, std::string species_name,
@@ -208,6 +215,12 @@ struct AMRStructure {
         int write_to_file(int iter_num);
         int write_to_file(bool pre_remesh, int iter_num);
         void print_panel_points();
+
+        // ---- restart entry point ----
+        // Loads xs, ps, fs and the panel tree from disk for a given iter_num,
+        // then rebuilds leaf_inds and q_ws. After this call the species is in
+        // the same state it would be in immediately after a remesh at iter_num.
+        int load_restart(int iter_num);
 
         // profiling
         void add_time(ProfileTypes prof_type, duration<double> op_time);
