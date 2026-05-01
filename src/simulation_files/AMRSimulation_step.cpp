@@ -4,6 +4,9 @@
 
 int AMRSimulation::step() {
     std::cout << "step " << iter_num + 1 << std::endl;
+    // if(t > 200) {
+    //     n_phase_space_diag = 100;
+    // }
     if (need_gather) {
         // gather from species (need at first and after every remesh)
         gather();

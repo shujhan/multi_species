@@ -80,6 +80,10 @@ struct AMRSimulation {
     bool need_scatter;
     bool need_gather;
 
+    // restart state
+    bool restart;
+    int  restart_iter;
+
     //field parameters
     // double greens_epsilon;
     BoundaryConditions bcs;
@@ -127,6 +131,7 @@ struct AMRSimulation {
     int run();
     int write_to_file();
     int write_to_file(bool pre_remesh);
+    int load_restart_state();
     void print_sim_setup();
 };
 #endif /* AMRSIMULATION_HPP */
