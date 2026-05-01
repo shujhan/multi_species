@@ -62,15 +62,32 @@ AMRSimulation::AMRSimulation(std::string sim_dir, std::string deck_address)
     }
 #endif
 
-    // initialize e
-    iter_num = 0;
-    t = 0;
-    evaluate_field_uniform_grid(t);
-
-    //write to file
-    write_to_file();
-
-    // print AMR description
+   if (restart) {
+        // We still build initial meshes from f0 above (in make_species_return_ptr),
+        // but immediately overwrite that state from disk.
+        iter_num = restart_iter;
+        t = restart_iter * dt;
+        if (load_restart_state() != 0) {
+            cout << "ERROR: failed to load restart state at iter "
+                 << restart_iter << ". Aborting." << endl;
+            // leave the object in a defined-but-empty state; run() will
+            // just immediately exit if iter_num >= num_steps anyway.
+            return;
+        }
+        // Recompute E on the loaded state.
+        evaluate_field_uniform_grid(t);
+        // Do NOT call write_to_file() here -- that file already exists on
+        // disk from the previous run.
+        cout << "Restart complete. Resuming at iter " << iter_num
+             << ", t = " << t
+             << ". Will run to iter " << num_steps << "." << endl;
+    } else {
+        iter_num = 0;
+        t = 0;
+        evaluate_field_uniform_grid(t);
+        write_to_file();
+    }
+ 
     print_sim_setup();
 
 }
@@ -82,5 +99,24 @@ AMRSimulation::~AMRSimulation() {
         delete species_list[ii];
     }
     delete calculate_e;
+}
+
+
+int AMRSimulation::load_restart_state() {
+    cout << "Loading restart state at iter " << restart_iter
+         << " from " << sim_dir << " ..." << endl;
+    for (auto& species : species_list) {
+        if (species->load_restart(restart_iter) != 0) {
+            cout << "Restart load failed for species "
+                 << species->species_name << endl;
+            return 1;
+        }
+    }
+    // After loading, the per-species xs/ps/fs/q_ws are valid. We need to
+    // mark that the simulation-level (gathered) buffers are stale so the
+    // next step()/evaluate_field call regathers them.
+    need_gather  = true;
+    need_scatter = false;
+    return 0;
 }
 

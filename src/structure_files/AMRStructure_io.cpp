@@ -144,9 +144,14 @@ int AMRStructure::write_to_file(int iter_num) {
 
 int AMRStructure::write_to_file(bool pre_remesh, int iter_num) {
     write_particles_to_file(pre_remesh, iter_num);
-    write_panels_to_file(pre_remesh, iter_num);
+    write_panels_to_file(pre_remesh, iter_num); 
+ 
+    // NEW: also dump full panel tree, but only on non-pre-remesh dumps,
+    // i.e. the "post-step" state which is what restart will load from.
+    write_panel_tree_to_file(iter_num);
     return 0;
 }
+ 
 
 
 

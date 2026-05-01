@@ -39,6 +39,10 @@ int AMRSimulation::get_box_t_params(pt::ptree &deck) {
     n_phase_space_diag = deck.get<int>("diag_phase_space_period", 1);
     dt = deck.get<double> ("dt", 0.5); 
 
+    // ---- restart parameters ----
+    restart       = deck.get<bool>("restart", false);
+    restart_iter  = deck.get<int> ("restart_iter", 0);
+
     return 0;
 }
 
