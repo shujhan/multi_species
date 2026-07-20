@@ -30,6 +30,13 @@ verbose=true;
         cout << "If you see this then you are sending in a leaf ind 0 somewhere you hoped not to." << endl;
         return leaf_ind;
     } else {
+        // Safety net for mixed xp/v refinement: with the single-link convention a
+        // walk step (or a parent lookup) can land on an internal panel. Its corner
+        // containment test would pass and the walk would stop on a non-leaf, so
+        // descend geometrically to the correct leaf instead.
+        if (old_panels[leaf_ind].is_refined_xp || old_panels[leaf_ind].is_refined_p) {
+            return find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, leaf_ind, verbose);
+        }
         Panel* panel = &(old_panels[leaf_ind]);
         double x_bl = old_xs[panel->point_inds[0]]; double p_bl = old_ps[panel->point_inds[0]];
         double x_tl = old_xs[panel->point_inds[2]]; double p_tl = old_ps[panel->point_inds[2]];
@@ -88,7 +95,7 @@ verbose=true;
                 }
             } else {
                 Panel* panel_right = &old_panels[panel->right_nbr_ind];
-                if (panel_right->is_refined_xp) { 
+                if (panel_right->is_refined_xp || panel_right->is_refined_p) { 
                     new_leaf_ind = panel_right->child_inds_start; 
                     if (verbose) {
                         cout << "in panel right children" << endl;
@@ -113,7 +120,7 @@ verbose=true;
                     }
                 } else {
                     Panel* panel_top = &old_panels[panel->top_nbr_ind];
-                    if (panel_top->is_refined_xp) {
+                    if (panel_top->is_refined_xp || panel_top->is_refined_p) {
                         new_leaf_ind = panel_top->child_inds_start;
                         if (verbose) {
                             cout << "in top children" << endl;
@@ -138,7 +145,7 @@ verbose=true;
                         }
                     } else {
                         Panel* panel_bottom = &old_panels[panel->bottom_nbr_ind];
-                        if (panel_bottom -> is_refined_xp) {
+                        if (panel_bottom->is_refined_xp || panel_bottom->is_refined_p) {
                             new_leaf_ind = panel_bottom->child_inds_start + 1;
                             if (verbose) {
                                 cout << "in parent bottom children" << endl;
@@ -175,6 +182,9 @@ cout <<"length of panels_list " << old_panels.size() << endl;
                             Panel* panel_left = &old_panels[panel->left_nbr_ind];
                             if (panel_left->is_refined_xp) {
                                 new_leaf_ind = panel_left->child_inds_start+2;
+                            }
+                            else if (panel_left->is_refined_p) {
+                                new_leaf_ind = panel_left->child_inds_start;
                                 if (verbose) {
                                     cout << "in left children" << endl;
                                     cout << "next leaf test " << new_leaf_ind << endl;

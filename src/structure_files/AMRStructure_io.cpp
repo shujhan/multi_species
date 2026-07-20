@@ -9,7 +9,7 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     std::ofstream x_file;
     std::ofstream p_file;
     std::ofstream f_file;
-    // std::ofstream qw_file;
+    std::ofstream qw_file;
     // std::ofstream e_file;
 
 
@@ -21,13 +21,13 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     x_file.open(sim_dir + "simulation_output/" + species_name + "/xs/xs_" + remesh_str + std::to_string(iter_num), std::ios::out | std::ios::binary); 
     p_file.open(sim_dir + "simulation_output/" + species_name + "/ps/ps_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
     f_file.open(sim_dir + "simulation_output/" + species_name + "/fs/fs_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
-    // qw_file.open(sim_dir + "simulation_output/" + species_name + "/qws/qws_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
+    qw_file.open(sim_dir + "simulation_output/" + species_name + "/qws/qws_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
     // e_file.open(sim_dir + "simulation_output/" + species_name + "/es/es_" + remesh_str  + std::to_string(iter_num), std::ios::out | std::ios::binary); 
 
     std::cout << "#xs " << xs.size() << std::endl;
     std::cout << "#ps " << ps.size() << std::endl;
     std::cout << "#fs " << fs.size() << std::endl;
-    // std::cout << "#qw " << q_ws.size() << std::endl;
+    std::cout << "#qw " << q_ws.size() << std::endl;
     // std::cout << "#es " << es.size() << std::endl;
 
     if (!x_file | !p_file | !f_file) {
@@ -44,11 +44,13 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
         double x = xs[ii];
         double p = ps[ii];
         double f = fs[ii];
+        double qws = q_ws[ii];
         // double e = es[ii];
         // double rho = final_rho[ii];
         x_file.write((char *) &x, sizeof(double));
         p_file.write((char *) &p, sizeof(double));
         f_file.write((char *) &f, sizeof(double));
+        qw_file.write((char *) &qws, sizeof(double));
         // e_file.write((char *) &e, sizeof(double));
         // rho_file.write((char *) &rho, sizeof(double));
     }
@@ -60,6 +62,7 @@ int AMRStructure::write_particles_to_file(bool pre_remesh, int iter_num) {
     x_file.close();
     p_file.close();
     f_file.close();
+    qw_file.close();
     // e_file.close();
     // rho_file.close();
     // cout << "Successfully wrote step " << iter_num << " particle data files" << endl;

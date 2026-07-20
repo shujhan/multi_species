@@ -2,7 +2,6 @@
 //
 //
 //
-// Ryan Sandberg
 //
 
 #ifndef PANEL_H
@@ -51,6 +50,7 @@ struct Panel {
     int left_nbr_ind, top_nbr_ind, right_nbr_ind, bottom_nbr_ind;
     bool is_left_bdry, is_right_bdry;
     bool needs_refinement;
+    bool needs_v_refinement;   // flagged for a 2-child split in v only (adaptive anisotropic refinement)
     bool is_refined_xp;
     bool is_refined_p;
     int child_inds_start;
@@ -106,4 +106,3 @@ struct Panel {
 std::ostream& operator<<(std::ostream& os, const Panel& panel);
 
 #endif /* PANEL_H */
-

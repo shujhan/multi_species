@@ -52,17 +52,18 @@ ExternalSine::ExternalSine(double Am)
 ExternalSine::ExternalSine(double Am, double k, double omega)
         : Am(Am), k(k), omega(omega) {}   
 void ExternalSine::operator() (double* es, double* targets, int nt, double t) {
-    double a0 = 0;
-    if (t < t1) {
-        a0 = Am * sin (t * M_PI / 100);
-    } else if (t < t2) {
-        a0 = Am;
-    } else if (t < t3) {
-        a0 = Am * cos((t-150)*M_PI / 100);
-    }
-    double omt = omega * t;
+    // double a0 = 0;
+    // if (t < t1) {
+    //     a0 = Am * sin (t * M_PI / 100);
+    // } else if (t < t2) {
+    //     a0 = Am;
+    // } else if (t < t3) {
+    //     a0 = Am * cos((t-150)*M_PI / 100);
+    // }
+    double omt = 2 * M_PI * omega * t;
     for (int ii = 0; ii < nt; ++ii) {
-        es[ii] += a0 * sin(k*targets[ii] - omt);
+        // es[ii] += a0 * sin(k*targets[ii] - omt);
+        es[ii] += Am * sin(2* M_PI * k * targets[ii] + omt);
     }
 }
 void ExternalSine::print_field_obj() {
