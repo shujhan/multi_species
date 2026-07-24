@@ -102,7 +102,7 @@ int AMRStructure::create_prerefined_mesh_p_refinement() {
         int num_panels_pre_refine = panels.size();
 
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
-            panel_it->needs_v_refinement = true;
+            panel_it->needs_refinement_v = true;
         }
         bool do_adaptive_refine = false;
         refine_panels_refine_v( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
@@ -216,7 +216,7 @@ int AMRStructure::create_prerefined_mesh() {
         int num_panels_pre_refine = panels.size();
 
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
-            panel_it->needs_v_refinement = true;
+            panel_it->needs_refinement_v = true;
         }
         bool do_adaptive_refine = false;
         refine_panels_refine_v( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
@@ -232,15 +232,8 @@ int AMRStructure::create_prerefined_mesh() {
 
 void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> f, bool do_adaptive_refine) {
 
-    // Splits flagged panels (needs_v_refinement) into 2 children stacked in v.
-    // Key geometric fact: a v-split creates NO new points on the top or bottom
-    // edges (children share the parent's bottom/mid/top rows); the only new
-    // points are at quarter heights on the left edge (9,10), the x-midline
-    // (11,12), and the right edge (13,14). Top/bottom compatibility with
-    // neighbors is therefore purely a link-bookkeeping problem, never a
-    // hanging-node problem. Safe both for uniform pre-refinement (p_height)
-    // and, after the hardening below, for adaptive use interleaved with
-    // refine_panels.
+    // Note: this assumes that we are refining in v uniformly before any xp refinement;
+    // No compatibility with xp refined panels is guaranteed
     std::vector <double> new_xs;
     std::vector <double> new_ps;
     std::vector <double> new_fs;
@@ -254,7 +247,7 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
     for (int jj = minimum_unrefined_index; jj < num_panels_before_this_iter; ++jj) {
         Panel* panel= &(panels[jj]);
         
-        if (panel->needs_v_refinement && !(panel->is_refined_xp || panel->is_refined_p) ) {
+        if (panel->needs_refinement_v && !(panel->is_refined_xp || panel->is_refined_p) ) {
             std::vector<double> panel_xs;
             std::vector<double> panel_ps;
             double dx, dp;
@@ -310,7 +303,7 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
                 panel_parent = &(panels[panel->parent_ind]);
                 Panel* parent_left = &(panels[panel_parent->left_nbr_ind]);
                 if (! (parent_left->is_refined_xp || parent_left->is_refined_p) ) {
-                    parent_left->needs_v_refinement = true;   // keep the neighborhood anisotropic
+                    parent_left->needs_refinement = true;
                     need_further_refinement = true;
                     // cout << "refine: setting refinement flag in panel " << jj << endl;
                 }
@@ -353,37 +346,23 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
             }
             
             // check bottom neighbor
-            // A v-split shares the parent's bottom edge points, so no new points
-            // are ever needed here: only child/neighbor links.
             int bottom_nbr_ind = panel->bottom_nbr_ind;
             if (bottom_nbr_ind == -2) {
                 child_0_bottom_nbr_ind = -2;
             } else if (bottom_nbr_ind == -1) {
-                // Adaptive case: same-level bottom neighbor does not exist yet.
-                // Leave the link unresolved (the leaf searches tolerate nbr < 0
-                // via the parent chain / geometric descent) and ask the parent's
-                // bottom neighbor to v-refine so 2:1 balance is restored.
-                panel_parent = &(panels[panel->parent_ind]);
-                int pb_ind = panel_parent->bottom_nbr_ind;
-                if (pb_ind >= 0) {
-                    Panel* parent_bottom = &(panels[pb_ind]);
-                    if (! (parent_bottom->is_refined_xp || parent_bottom->is_refined_p) ) {
-                        parent_bottom->needs_v_refinement = true;
-                        need_further_refinement = true;
-                    }
-                }
-                child_0_bottom_nbr_ind = -1;
+                // vertical neighbor is coarser: expected at adaptive v/xv interfaces;
+                // proceed with -1 link (leaf search falls back to root search there)
+                #ifdef DEBUG
+                cout << "refine in v: panel " << jj << " has coarser bottom neighbor" << endl;
+                #endif
             } else {
                 Panel* panel_bottom = &(panels[bottom_nbr_ind]);
                 if (panel_bottom->is_refined_xp ) {
-                    // Bottom neighbor is xp-split: its top-row children (1 and 3)
-                    // both abut child 0. Store one (single-link convention, as in
-                    // the coarse-next-to-fine case elsewhere) and patch both
-                    // reciprocal links so the neighbor walk never lands on the
-                    // (now internal) parent panel.
-                    child_0_bottom_nbr_ind = panel_bottom->child_inds_start + 1;
-                    panels[panel_bottom->child_inds_start + 1].top_nbr_ind = num_new_panels;
-                    panels[panel_bottom->child_inds_start + 3].top_nbr_ind = num_new_panels;
+                    // xv-refined vertical neighbor: expected at adaptive v/xv interfaces;
+                    // leave -1 link (leaf search descends through the refined panel)
+                    #ifdef DEBUG
+                    cout << "refine in v: panel " << jj << " has xv-refined vertical neighbor" << endl;
+                    #endif
                 }
                 else {
                     if (!panel_bottom->is_refined_p) {
@@ -397,29 +376,24 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
                 }
             }
 
-            // check top neighbor (mirror of the bottom-neighbor logic)
+            // check top neighbor
             int top_nbr_ind = panel->top_nbr_ind;
             if (top_nbr_ind == -2) {
                 child_1_top_nbr_ind = -2;
             } else if (top_nbr_ind == -1) {
-                panel_parent = &(panels[panel->parent_ind]);
-                int pt_ind = panel_parent->top_nbr_ind;
-                if (pt_ind >= 0) {
-                    Panel* parent_top = &(panels[pt_ind]);
-                    if (! (parent_top->is_refined_xp || parent_top->is_refined_p) ) {
-                        parent_top->needs_v_refinement = true;
-                        need_further_refinement = true;
-                    }
-                }
-                child_1_top_nbr_ind = -1;
+                // vertical neighbor is coarser: expected at adaptive v/xv interfaces;
+                // proceed with -1 link (leaf search falls back to root search there)
+                #ifdef DEBUG
+                cout << "refine in v: panel " << jj << " has coarser top neighbor" << endl;
+                #endif
             } else {
                 Panel* panel_top = &(panels[top_nbr_ind]);
                 if (panel_top->is_refined_xp ) {
-                    // Top neighbor is xp-split: its bottom-row children (0 and 2)
-                    // both abut child 1. Store one and patch both reciprocals.
-                    child_1_top_nbr_ind = panel_top->child_inds_start;
-                    panels[panel_top->child_inds_start].bottom_nbr_ind = num_new_panels + 1;
-                    panels[panel_top->child_inds_start + 2].bottom_nbr_ind = num_new_panels + 1;
+                    // xv-refined vertical neighbor: expected at adaptive v/xv interfaces;
+                    // leave -1 link (leaf search descends through the refined panel)
+                    #ifdef DEBUG
+                    cout << "refine in v: panel " << jj << " has xv-refined vertical neighbor" << endl;
+                    #endif
                 } else {
                     if (!panel_top->is_refined_p) {
                         child_1_top_nbr_ind = -1;
@@ -445,7 +419,7 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
                 panel_parent = &(panels[panel->parent_ind]);
                 Panel* parent_right = &(panels[panel_parent->right_nbr_ind]);
                 if (!(parent_right->is_refined_xp || parent_right->is_refined_p) ) {
-                    parent_right->needs_v_refinement = true;   // keep the neighborhood anisotropic
+                    parent_right->needs_refinement = true;
                     need_further_refinement = true;
                     // cout << "refine: setting refinement flag in panel " << jj << endl;
                 }
@@ -491,7 +465,7 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
             // generate new panels
             // add these to list of prospective_panel_indices
             if (do_adaptive_refine) {
-                for (int ii = num_new_panels; ii < num_new_panels + 2; ++ii) {   // a v-split makes 2 children, not 4
+                for (int ii = num_new_panels; ii < num_new_panels + 4; ++ii) {
                     prospective_leaf_inds.push_back(ii);
                 }
             }
@@ -502,27 +476,24 @@ void AMRStructure::refine_panels_refine_v(std::function<double (double,double)> 
             // panel->print_panel();
             int child_level = panel->level + 1;
             int panel_ind = panel->panel_ind;
-            // Copy everything we still need out of *panel BEFORE the push_backs:
-            // push_back may reallocate `panels`, invalidating `panel` and any
-            // pointer into it.
-            int pinds[9];
-            for (int ii = 0; ii < 9; ii++) { pinds[ii] = panel->point_inds[ii]; }
-            bool p_is_left_bdry = panel->is_left_bdry;
-            bool p_is_right_bdry = panel->is_right_bdry;
+            int* point_inds = panel->point_inds;
+            // for (int ii = 0; ii < ; ii++) {
+            //     panel_vertex_inds[ii] = panel->point_inds[ii];
+            // }
             panels.push_back(Panel {num_new_panels, child_level, panel_ind, 0, 
-                    pinds[0], point_9_ind, pinds[1],
-                    pinds[3], point_11_ind, pinds[4],
-                    pinds[6], point_13_ind, pinds[7],
+                    point_inds[0], point_9_ind, point_inds[1],
+                    point_inds[3], point_11_ind, point_inds[4],
+                    point_inds[6], point_13_ind, point_inds[7],
                     child_0_left_nbr_ind, num_new_panels + 1, 
                     child_0_right_nbr_ind, child_0_bottom_nbr_ind,
-                    p_is_left_bdry, p_is_right_bdry});
+                    panel->is_left_bdry, panel->is_right_bdry});
             panels.push_back(Panel {num_new_panels+1, child_level, panel_ind, 1, 
-                    pinds[1], point_10_ind, pinds[2],
-                    pinds[4], point_11_ind+1, pinds[5],
-                    pinds[7], point_14_ind, pinds[8],
+                    point_inds[1], point_10_ind, point_inds[2],
+                    point_inds[4], point_11_ind+1, point_inds[5],
+                    point_inds[7], point_14_ind, point_inds[8],
                     child_1_left_nbr_ind, child_1_top_nbr_ind,
                     child_1_right_nbr_ind, num_new_panels,
-                    p_is_left_bdry, p_is_right_bdry});
+                    panel->is_left_bdry, panel->is_right_bdry});
 
         } // end if panel is flagged
         
@@ -561,7 +532,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
 
     for (int jj = minimum_unrefined_index; jj < num_panels_before_this_iter; ++jj) {
         Panel* panel= &(panels[jj]);
-        if (panel->needs_refinement ) {
+        if (panel->needs_refinement && !panel->needs_refinement_v && !(panel->is_refined_xp || panel->is_refined_p) ) {
             // printf("refining panel %i\n", panel->get_panel_ind() );
             std::vector<double> panel_xs;
             std::vector<double> panel_ps;
@@ -619,7 +590,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
             } else if (panel->left_nbr_ind == -1) {
                 panel_parent = &(panels[panel->parent_ind]);
                 Panel* parent_left = &(panels[panel_parent->left_nbr_ind]);
-                if (!(parent_left->is_refined_xp || parent_left->is_refined_p)) {
+                if (!parent_left->is_refined_xp) {
                     parent_left->needs_refinement = true;
                     need_further_refinement = true;
                     // cout << "refine: setting refinement flag in panel " << jj << endl;
@@ -632,26 +603,17 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
             } else {
                 Panel* panel_left = &(panels[panel->left_nbr_ind]);
-                if (! (panel_left->is_refined_xp || panel_left->is_refined_p) ) {
+                if (! panel_left->is_refined_xp) {
                     point_9_ind = new_vert_ind++;
                     point_10_ind = new_vert_ind++;
                     new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
                     new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
                 }
                 else {
-                    if (panel_left->is_refined_xp) {
-                        child_0_left_nbr_ind = panel_left->child_inds_start +2;
-                        child_1_left_nbr_ind = panel_left->child_inds_start + 3;
-                    } else {
-                        // v-refined left neighbor: its 2 children stack in v and both
-                        // span the full shared edge; their right-edge midpoints
-                        // (point_inds[7]) sit at exactly the 1/4 and 3/4 heights
-                        // needed for points 9 and 10.
-                        child_0_left_nbr_ind = panel_left->child_inds_start;
-                        child_1_left_nbr_ind = panel_left->child_inds_start + 1;
-                    }
+                    child_0_left_nbr_ind = panel_left->child_inds_start +2;
                     Panel* child_0_left_nbr = &(panels[child_0_left_nbr_ind]);
                     child_0_left_nbr->right_nbr_ind = num_new_panels;
+                    child_1_left_nbr_ind = panel_left->child_inds_start + 3;
                     Panel* child_1_left_nbr = &(panels[child_1_left_nbr_ind]);
                     child_1_left_nbr->right_nbr_ind = num_new_panels + 1;
                     if (panel->is_left_bdry && bcs==periodic_bcs) {
@@ -677,7 +639,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 panel_parent = &(panels[panel->parent_ind]);
                 
                 Panel* parent_bottom = &(panels[panel_parent->bottom_nbr_ind]);
-                if (!(parent_bottom->is_refined_xp || parent_bottom->is_refined_p)) {
+                if (!parent_bottom->is_refined_xp ) {
                     parent_bottom->needs_refinement = true;
                     need_further_refinement = true;
                     #ifdef DEBUG
@@ -690,20 +652,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
             } else {
                 Panel* panel_bottom = &(panels[panel->bottom_nbr_ind]);
-                if (! (panel_bottom->is_refined_xp || panel_bottom->is_refined_p) ) {
-                    point_11_ind = new_vert_ind++;
-                    point_18_ind = new_vert_ind++;
-                    new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-                    new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-                }
-                else if (panel_bottom->is_refined_p) {
-                    // v-refined bottom neighbor: its TOP child spans our full dx and
-                    // abuts both of our bottom children. Its top edge carries points
-                    // only at x = 0, 1/2, 1 of the span, so the quarter-x points 11
-                    // and 18 do not exist there -> create them as hanging nodes.
-                    child_0_bottom_nbr_ind = panel_bottom->child_inds_start + 1;
-                    child_2_bottom_nbr_ind = panel_bottom->child_inds_start + 1;
-                    panels[panel_bottom->child_inds_start + 1].top_nbr_ind = num_new_panels; // single-link convention
+                if (! panel_bottom->is_refined_xp ) {
                     point_11_ind = new_vert_ind++;
                     point_18_ind = new_vert_ind++;
                     new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
@@ -734,7 +683,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 panel_parent = &(panels[panel->parent_ind]);
                 
                 Panel* parent_top = &(panels[panel_parent->top_nbr_ind]);
-                if (!(parent_top->is_refined_xp || parent_top->is_refined_p)) {
+                if (!parent_top->is_refined_xp ) {
                     parent_top->needs_refinement = true;
                     need_further_refinement = true;
                     // cout << "refine: setting refinement flag in panel " << jj << endl;
@@ -745,18 +694,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
             } else {
                 Panel* panel_top = &(panels[panel->top_nbr_ind]);
-                if (! (panel_top->is_refined_xp || panel_top->is_refined_p) ) {
-                    point_15_ind = new_vert_ind++;
-                    point_22_ind = new_vert_ind++;
-                    new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-                    new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-                }
-                else if (panel_top->is_refined_p) {
-                    // v-refined top neighbor: its BOTTOM child abuts both of our top
-                    // children; quarter-x points 15 and 22 are hanging nodes.
-                    child_1_top_nbr_ind = panel_top->child_inds_start;
-                    child_3_top_nbr_ind = panel_top->child_inds_start;
-                    panels[panel_top->child_inds_start].bottom_nbr_ind = num_new_panels + 1; // single-link convention
+                if (! panel_top->is_refined_xp ) {
                     point_15_ind = new_vert_ind++;
                     point_22_ind = new_vert_ind++;
                     new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
@@ -786,7 +724,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
             } else if (panel->right_nbr_ind == -1) {
                 panel_parent = &(panels[panel->parent_ind]);
                 Panel* parent_right = &(panels[panel_parent->right_nbr_ind]);
-                if (!(parent_right->is_refined_xp || parent_right->is_refined_p)) {
+                if (!parent_right->is_refined_xp ) {
                     parent_right->needs_refinement = true;
                     need_further_refinement = true;
                     // cout << "refine: setting refinement flag in panel " << jj << endl;
@@ -797,7 +735,7 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                 new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
             } else {
                 Panel* panel_right = &(panels[panel->right_nbr_ind]);
-                if (! (panel_right->is_refined_xp || panel_right->is_refined_p) ) {
+                if (! panel_right->is_refined_xp) {
                     point_23_ind = new_vert_ind++;
                     point_24_ind = new_vert_ind++;
                     new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
@@ -810,11 +748,6 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
                     }
                 }
                 else {
-                    // Works for BOTH refinement types of the right neighbor:
-                    // xp-split -> children 0 (bottom-left) and 1 (top-left) abut us;
-                    // v-split  -> children 0 (bottom) and 1 (top) abut us.
-                    // In both cases their left-edge midpoints (point_inds[1]) sit at
-                    // the 1/4 and 3/4 heights needed for points 23 and 24.
                     child_2_right_nbr_ind = panel_right->child_inds_start;
                     Panel* child_2_right_nbr = &(panels[child_2_right_nbr_ind]);
                     child_2_right_nbr->left_nbr_ind = num_new_panels+2;
@@ -865,40 +798,38 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
             // panel->print_panel();
             int child_level = panel->level + 1;
             int panel_ind = panel->panel_ind;
-            // Copy out of *panel BEFORE the push_backs: push_back may reallocate
-            // `panels`, invalidating `panel` and any pointer into it.
-            int point_inds[9];
-            for (int ii = 0; ii < 9; ii++) { point_inds[ii] = panel->point_inds[ii]; }
-            bool p_is_left_bdry = panel->is_left_bdry;
-            bool p_is_right_bdry = panel->is_right_bdry;
+            int* point_inds = panel->point_inds;
+            // for (int ii = 0; ii < ; ii++) {
+            //     panel_vertex_inds[ii] = panel->point_inds[ii];
+            // }
             panels.push_back(Panel {num_new_panels, child_level, panel_ind, 0, 
                     point_inds[0], point_9_ind, point_inds[1],
                     point_11_ind, point_12_ind, point_12_ind + 1,
                     point_inds[3], point_16_ind, point_inds[4],
                     child_0_left_nbr_ind, num_new_panels + 1, 
                     num_new_panels + 2, child_0_bottom_nbr_ind,
-                    p_is_left_bdry, false});
+                    panel->is_left_bdry, false});
             panels.push_back(Panel {num_new_panels+1, child_level, panel_ind, 1, 
                     point_inds[1], point_10_ind, point_inds[2],
                     point_12_ind+1, point_12_ind+2, point_15_ind,
                     point_inds[4], point_16_ind+1, point_inds[5],
                     child_1_left_nbr_ind, child_1_top_nbr_ind,
                     num_new_panels + 3, num_new_panels,
-                    p_is_left_bdry, false});
+                    panel->is_left_bdry, false});
             panels.push_back(Panel {num_new_panels+2, child_level, panel_ind, 2, 
                     point_inds[3], point_16_ind, point_inds[4],
                     point_18_ind, point_19_ind, point_19_ind+1,
                     point_inds[6], point_23_ind, point_inds[7],
                     num_new_panels, num_new_panels+3, 
                     child_2_right_nbr_ind, child_2_bottom_nbr_ind,
-                    false, p_is_right_bdry});
+                    false, panel->is_right_bdry});
             panels.push_back(Panel {num_new_panels+3, child_level, panel_ind, 3,
                     point_inds[4], point_16_ind+1, point_inds[5],
                     point_19_ind+1, point_19_ind+2, point_22_ind,
                     point_inds[7], point_24_ind, point_inds[8],
                     num_new_panels+1, child_3_top_nbr_ind,
                     child_3_right_nbr_ind, num_new_panels+2,
-                    false, p_is_right_bdry});
+                    false, panel->is_right_bdry});
 
         } // end if panel is flagged
     } //end for loop through panels
@@ -1007,10 +938,8 @@ void AMRStructure::generate_mesh(std::function<double (double,double)> f,
             cout << "refining panels" << endl;
             #endif
             auto amr_start = high_resolution_clock::now();
-            // xp splits first so v splits see settled xp neighbors, then the
-            // anisotropic v-only pass (no-op unless test_panel set v flags).
-            refine_panels(f, do_adaptive_refine);
-            refine_panels_refine_v(f, do_adaptive_refine);
+            refine_panels(f, do_adaptive_refine);           // xv split
+            refine_panels_refine_v(f, do_adaptive_refine);  // v-only split
             auto amr_stop = high_resolution_clock::now();
             add_time(amr_refine_time, duration_cast<duration<double>>(amr_stop-amr_start) );
 
@@ -1066,14 +995,7 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
         panel_fs[ii] = fs[panel_it->point_inds[ii]];
     }
     // std::vector<bool> criteria(amr_epsilons.size(), true);
-    // Criteria are tracked separately so that, when a fifth epsilon is supplied,
-    // a panel steep only in v can be split in v alone (2 children) instead of
-    // isotropically (4 children):
-    //   amr_epsilons = [df_abs, df_rel, fmax/fmin, |df/dx|_max, |df/dv|_max]
-    // With <= 4 epsilons the behavior is identical to the original isotropic code.
-    bool refine_criteria_met = false;   // eps[0..2]: range/ratio criteria (direction-blind)
-    bool x_criterion_met = false;       // eps[3]: |df/dx|
-    bool v_criterion_met = false;       // eps[4]: |df/dv|
+    bool refine_criteria_met = false;
     if (amr_epsilons.size() > 0) {
         double max_f = panel_fs[0];
         double min_f = panel_fs[0];
@@ -1102,16 +1024,18 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
         refine_criteria_met = refine_criteria_met || (max_f - min_f > amr_epsilons[0]);
 
 
-        if (amr_epsilons.size() > 1) {
-            refine_criteria_met = refine_criteria_met || (max_f - min_f) / panel_fs[4] > amr_epsilons[1];
+        // amr_epsilons[1] is reserved for the v-only x-threshold (see below),
+        // so the optional relative / ratio criteria live at [2] / [3].
+        if (amr_epsilons.size() > 2) {
+            refine_criteria_met = refine_criteria_met || (max_f - min_f) / panel_fs[4] > amr_epsilons[2];
         }
 
-        if (amr_epsilons.size() > 2) {
-            refine_criteria_met = refine_criteria_met || max_f / min_f > amr_epsilons[2];
+        if (amr_epsilons.size() > 3) {
+            refine_criteria_met = refine_criteria_met || max_f / min_f > amr_epsilons[3];
         }
 
     }
-    if (amr_epsilons.size() > 3) {
+    if (amr_epsilons.size() > 4) {
         int i0, i3;
         i0 = panel_it->point_inds[0];
         i3 = panel_it->point_inds[3];
@@ -1129,9 +1053,9 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
     cout << "dx " << dx << endl;;
     cout << "max_dfdx at panel " << panel_ind << " is " << max_dfdx << endl;
 #endif
-        x_criterion_met = (max_dfdx > amr_epsilons[3]);
+        refine_criteria_met = refine_criteria_met || (max_dfdx > amr_epsilons[4]);
     }
-    if (amr_epsilons.size() > 4) {
+    if (amr_epsilons.size() > 5) {
         int i0, i1;
         i0 = panel_it->point_inds[0];
         i1 = panel_it->point_inds[1];
@@ -1139,7 +1063,7 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
         double abs_dfdps[6];
         for (int jj = 0; jj < 3; ++jj) {
             for (int ii = 0; ii < 2; ii++) {
-                abs_dfdps[ii] = fabs((panel_fs[3*jj + ii + 1] - panel_fs[3*jj + ii]) / dp);
+                abs_dfdps[2*jj + ii] = fabs((panel_fs[3*jj + ii + 1] - panel_fs[3*jj + ii]) / dp);
             }
         }
         double max_dfdp = abs_dfdps[0];
@@ -1150,42 +1074,50 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
     cout << "dp " << dp << endl;
     cout << "max_dfdp at panel " << panel_ind << " is " << max_dfdp << endl;
 #endif
-        v_criterion_met = (max_dfdp > amr_epsilons[4]);
+        refine_criteria_met = refine_criteria_met || (max_dfdp > amr_epsilons[5]);
     }
+    // criteria[0] = (max_f - min_f > 100);
+    // criteria[1] = (max_dfdx > 100);
+    // criteria[2] = (max_dfdp > 100);
+    // bool refine_criteria_met = std::accumulate(criteria.begin(), criteria.end(), true, std::logical_and<bool>() );
 
-    // Flagging policy:
-    //  - legacy mode (<= 4 epsilons): any criterion -> isotropic xp split (as before)
-    //  - anisotropic mode (5 epsilons): direction gradients take precedence.
-    //      x steep (regardless of v)      -> xp split
-    //      only range/ratio criteria met  -> xp split (no direction info; be safe)
-    //      only v steep                   -> v-only split (2 children)
-    bool do_v_adapt = (amr_epsilons.size() > 4);
-    bool flag_xp = false, flag_v = false;
-    if (!do_v_adapt) {
-        flag_xp = refine_criteria_met || x_criterion_met || v_criterion_met;
-    } else {
-        if (x_criterion_met || refine_criteria_met) { flag_xp = true; }
-        else if (v_criterion_met)                   { flag_v = true; }
-    }
-
-    if (panel_it->level < max_height && flag_xp) { 
+    if (panel_it->level < max_height && refine_criteria_met) { 
         panel_it->needs_refinement = true; 
         need_further_refinement = true;
+        // check if we do v_refine only or xv_refine.
+        // x-variation: |df| across columns at fixed v (index = 3*ix + jv)
+        double max_diff_in_x = 0;
+        for (int ii = 1; ii < 3; ++ii) {
+            if (fabs(panel_fs[0+3*ii] -  panel_fs[0+3*(ii-1)]) > max_diff_in_x) {
+                max_diff_in_x = fabs(panel_fs[0+3*ii] -  panel_fs[0+3*(ii-1)]);
+            }
+            if (fabs(panel_fs[1+3*ii] -  panel_fs[1+3*(ii-1)]) > max_diff_in_x) {
+                max_diff_in_x = fabs(panel_fs[1+3*ii] -  panel_fs[1+3*(ii-1)]);
+            }
+            if (fabs(panel_fs[2+3*ii] -  panel_fs[2+3*(ii-1)]) > max_diff_in_x) {
+                max_diff_in_x = fabs(panel_fs[2+3*ii] -  panel_fs[2+3*(ii-1)]);
+            }
+        }
+        // v-only refinement when the x-structure is below its own absolute
+        // threshold amr_epsilons[1]. This is a separate knob from the
+        // refinement trigger amr_epsilons[0]: lowering the trigger to resolve
+        // fainter filaments does not force every panel into a full xv split.
+        // Deck usage: amr_epsilons = [eps_refine, eps_x]. If eps_x is absent,
+        // fall back to eps_refine (original behaviour).
+        double eps_x = (amr_epsilons.size() > 1) ? amr_epsilons[1] : amr_epsilons[0];
+        if (max_diff_in_x < eps_x) {
+            // variation is essentially only in v: refine_panels_refine_v takes
+            // this panel, refine_panels skips it
+            panel_it->needs_refinement_v = true;
+        }
         if (verbose) {
             cout << "panel " << panel_ind << " is level " << panel_it->level << ", max height " << max_height << ", and is flagged for refinement" << endl;
-        }
-    }
-    else if (panel_it->level < max_height && flag_v) {
-        panel_it->needs_v_refinement = true;
-        need_further_refinement = true;
-        if (verbose) {
-            cout << "panel " << panel_ind << " is level " << panel_it->level << ", max height " << max_height << ", and is flagged for v-only refinement" << endl;
         }
     }
     else if (verbose)
     {
         cout << "panel " << panel_ind << " is level " << panel_it->level << ", max height " << max_height;
-        if (flag_xp || flag_v) {
+        if (refine_criteria_met) {
             cout << ", and is flagged for refinement" << endl;
         } else {
             cout << ", and is not flagged for refinement" << endl;

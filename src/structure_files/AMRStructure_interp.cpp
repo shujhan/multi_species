@@ -30,13 +30,6 @@ verbose=true;
         cout << "If you see this then you are sending in a leaf ind 0 somewhere you hoped not to." << endl;
         return leaf_ind;
     } else {
-        // Safety net for mixed xp/v refinement: with the single-link convention a
-        // walk step (or a parent lookup) can land on an internal panel. Its corner
-        // containment test would pass and the walk would stop on a non-leaf, so
-        // descend geometrically to the correct leaf instead.
-        if (old_panels[leaf_ind].is_refined_xp || old_panels[leaf_ind].is_refined_p) {
-            return find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, leaf_ind, verbose);
-        }
         Panel* panel = &(old_panels[leaf_ind]);
         double x_bl = old_xs[panel->point_inds[0]]; double p_bl = old_ps[panel->point_inds[0]];
         double x_tl = old_xs[panel->point_inds[2]]; double p_tl = old_ps[panel->point_inds[2]];
@@ -95,7 +88,7 @@ verbose=true;
                 }
             } else {
                 Panel* panel_right = &old_panels[panel->right_nbr_ind];
-                if (panel_right->is_refined_xp || panel_right->is_refined_p) { 
+                if (panel_right->is_refined_xp) { 
                     new_leaf_ind = panel_right->child_inds_start; 
                     if (verbose) {
                         cout << "in panel right children" << endl;
@@ -120,7 +113,7 @@ verbose=true;
                     }
                 } else {
                     Panel* panel_top = &old_panels[panel->top_nbr_ind];
-                    if (panel_top->is_refined_xp || panel_top->is_refined_p) {
+                    if (panel_top->is_refined_xp) {
                         new_leaf_ind = panel_top->child_inds_start;
                         if (verbose) {
                             cout << "in top children" << endl;
@@ -145,7 +138,7 @@ verbose=true;
                         }
                     } else {
                         Panel* panel_bottom = &old_panels[panel->bottom_nbr_ind];
-                        if (panel_bottom->is_refined_xp || panel_bottom->is_refined_p) {
+                        if (panel_bottom -> is_refined_xp) {
                             new_leaf_ind = panel_bottom->child_inds_start + 1;
                             if (verbose) {
                                 cout << "in parent bottom children" << endl;
@@ -182,9 +175,6 @@ cout <<"length of panels_list " << old_panels.size() << endl;
                             Panel* panel_left = &old_panels[panel->left_nbr_ind];
                             if (panel_left->is_refined_xp) {
                                 new_leaf_ind = panel_left->child_inds_start+2;
-                            }
-                            else if (panel_left->is_refined_p) {
-                                new_leaf_ind = panel_left->child_inds_start;
                                 if (verbose) {
                                     cout << "in left children" << endl;
                                     cout << "next leaf test " << new_leaf_ind << endl;
@@ -209,15 +199,63 @@ cout <<"length of panels_list " << old_panels.size() << endl;
             }
             cout << endl;
         }
+        if (new_leaf_ind < 0) {
+            // A -1 parent hop can occur at v/xv mixed interfaces where links were
+            // never set. Fall back to the exact recursive search from the root.
+            if (verbose) {
+                cout << "neighbor walk hit an unset link; searching from root" << endl;
+            }
+            if (bcs == periodic_bcs) {
+                while (tx >= x_max) { tx -= Lx; }
+                while (tx <  x_min) { tx += Lx; }
+            }
+            return find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, 0, verbose);
+        }
         if (history.find(new_leaf_ind) == history.end()) {
             history.emplace(new_leaf_ind);
             if (verbose) {
                 cout << "running find_leaf again for (x,p)=(" << tx << ", " << tp << ")" << endl;
             }
             new_leaf_ind = find_leaf_containing_point_from_neighbor(tx,tp,beyond_boundary, new_leaf_ind, history, verbose);
-        } else if (verbose)
+        } else 
         {
-            cout << "done searching." << endl;
+            if (verbose) {
+                cout << "done searching." << endl;
+            }
+            // At mixed v/xv interfaces the walk can terminate by cycling through
+            // stale links and land on a panel that does NOT contain the point;
+            // biquadratic extrapolation from a far panel then produces huge garbage
+            // values. Verify containment of the final panel; fall back to the exact
+            // recursive search from the root if it fails. Sides with -2 neighbors
+            // are exempt (legitimate boundary extrapolation).
+            Panel* found = &old_panels[new_leaf_ind];
+            double fx_bl = old_xs[found->point_inds[0]]; double fp_bl = old_ps[found->point_inds[0]];
+            double fx_tl = old_xs[found->point_inds[2]]; double fp_tl = old_ps[found->point_inds[2]];
+            double fx_mid = old_xs[found->point_inds[4]];
+            double fx_br = old_xs[found->point_inds[6]]; double fp_br = old_ps[found->point_inds[6]];
+            double fx_tr = old_xs[found->point_inds[8]]; double fp_tr = old_ps[found->point_inds[8]];
+            if (bcs == periodic_bcs) {
+                if (tx - fx_mid >= Lx/2) { tx -= Lx; }
+                if (tx - fx_mid < -Lx/2) { tx += Lx; }
+            }
+            bool f_right  = ((fx_tr - fx_br) * (tp - fp_br) >  (fp_tr - fp_br) * (tx - fx_br)) || found->right_nbr_ind  == -2;
+            bool f_left   = ((fx_tl - fx_bl) * (tp - fp_bl) <= (fp_tl - fp_bl) * (tx - fx_bl)) || found->left_nbr_ind   == -2;
+            bool f_top    = ((fx_tr - fx_tl) * (tp - fp_tl) <  (fp_tr - fp_tl) * (tx - fx_tl)) || found->top_nbr_ind    == -2;
+            bool f_bottom = ((fx_br - fx_bl) * (tp - fp_bl) >= (fp_br - fp_bl) * (tx - fx_bl)) || found->bottom_nbr_ind == -2;
+            if (! (f_right && f_left && f_top && f_bottom) ) {
+                if (verbose) {
+                    cout << "walk terminated on non-containing panel " << new_leaf_ind << "; searching from root" << endl;
+                }
+                if (bcs == periodic_bcs) {
+                    while (tx >= x_max) { tx -= Lx; }
+                    while (tx <  x_min) { tx += Lx; }
+                }
+                new_leaf_ind = find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, 0, verbose);
+            } else if (found->is_refined_xp || found->is_refined_p) {
+                // walk stopped on a refined panel it reached through a stale or
+                // parent link; descend to the containing leaf
+                new_leaf_ind = find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, new_leaf_ind, verbose);
+            }
         }
         if (!allow_boundary_extrapolation) {
             bool boundary_extrapolating_right = !ineq_right && panel->right_nbr_ind==-2;

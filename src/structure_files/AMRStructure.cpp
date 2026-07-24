@@ -162,7 +162,8 @@ void AMRStructure::get_reduced_xs_ws() {
         // std::cout << "ii " << ii << ", x[sort_ind[ii]] " << xsi << ", cf " << val << std::endl;
         // if (xsi > val) { std::cout << "xsi > val";}
         // else {std::cout << "xsi <= val" << std::endl;}
-        if (xsi > val) {
+        const double xtol = 1e-10 * (x_max - x_min);
+        if (xsi > val + xtol) {
             val = xsi;
             unique_ind++;
             reduced_xs.push_back(xsi);

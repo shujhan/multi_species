@@ -49,8 +49,8 @@ struct Panel {
     int which_child;
     int left_nbr_ind, top_nbr_ind, right_nbr_ind, bottom_nbr_ind;
     bool is_left_bdry, is_right_bdry;
-    bool needs_refinement;
-    bool needs_v_refinement;   // flagged for a 2-child split in v only (adaptive anisotropic refinement)
+    bool needs_refinement;      // flagged for full xv (4-child) refinement
+    bool needs_refinement_v;    // flagged for v-only (2-child) refinement
     bool is_refined_xp;
     bool is_refined_p;
     int child_inds_start;
