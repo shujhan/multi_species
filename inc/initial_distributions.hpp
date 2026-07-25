@@ -1,4 +1,3 @@
-
 #ifndef INITIAL_DISTRIBUTIONS_HPP
 #define INITIAL_DISTRIBUTIONS_HPP
 
@@ -24,6 +23,16 @@ class distribution {
     public:
         virtual double operator() (double x, double p)=0;
         virtual void print()=0;
+
+        // x-independent part of the initial condition.  Used as the control
+        // variate for the AMR refinement indicator: the indicator is driven by
+        // df = f - background(p) rather than by f, so that it responds to the
+        // perturbation instead of to the slope of the equilibrium.
+        //
+        // The default below is correct ONLY for ICs with no x dependence.
+        // Every IC carrying a (1 + amp*cos(k*x)) factor MUST override it.
+        virtual double background(double p) { return (*this)(0.0, p); }
+        virtual ~distribution() {}
 };
 
 class F0_M : public distribution {
@@ -46,6 +55,7 @@ class F0_LD : public distribution {
         F0_LD(double pth, double pstr, double k, double amp);
 
         double operator() (double x, double p);
+        double background(double p);
         double get_pth();
         double get_k();
         double get_amp();
@@ -88,6 +98,7 @@ class F0_ion_acoustic_electron : public distribution {
         F0_ion_acoustic_electron(double pth, double p_str, double k, double amp);
 
         double operator() (double x, double p);
+        double background(double p);
         double get_pth();
         double get_k();
         double get_amp();
@@ -102,6 +113,7 @@ class F0_ion_acoustic_ion : public distribution {
         F0_ion_acoustic_ion(double pth, double p_str, double k, double amp, double mass);
 
         double operator() (double x, double p);
+        double background(double p);
         double get_pth();
         double get_k();
         double get_amp();

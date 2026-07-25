@@ -30,9 +30,12 @@ F0_LD::F0_LD(double pth, double k, double amp)
 F0_LD::F0_LD(double pth, double pstr, double k, double amp) 
     : pth(pth), pstr(pstr), k(k), amp(amp) {}
 
+double F0_LD::background(double p) {
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-pstr)*(p-pstr) / 2 / pth /pth);
+}
+// operator() written in terms of background() so the two cannot drift apart
 double F0_LD::operator() (double x, double p) {
-    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-pstr)*(p-pstr) / 2 / pth /pth) 
-        * ( 1 + amp * cos(k * x ));
+    return background(p) * ( 1 + amp * cos(k * x ));
 }
 double F0_LD::get_pth() { return pth; }
 double F0_LD::get_k() { return k; }
@@ -106,9 +109,14 @@ F0_ion_acoustic_electron::F0_ion_acoustic_electron(double pth, double p_str, dou
     // maxwellian = F0_M(pth);
 }
 
+double F0_ion_acoustic_electron::background(double p) {
+    // NB: do NOT use the `maxwellian` member here -- its initialisation is
+    // commented out in both constructors, so it is default-constructed at
+    // pth = 1, p_str = 0 and would silently ignore this species' pth.
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth);
+}
 double F0_ion_acoustic_electron::operator() (double x, double p) {
-    // return (maxwellian(x, p - p_str)) * (1 + amp * cos(k * x));
-    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
+    return background(p) * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_electron::get_pth() { return pth; }
 double F0_ion_acoustic_electron::get_k() { return k; }
@@ -135,9 +143,14 @@ F0_ion_acoustic_ion::F0_ion_acoustic_ion(double pth, double p_str, double k, dou
     // 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-pstr)*(p-pstr) / 2 / pth /pth);
 }
 
+double F0_ion_acoustic_ion::background(double p) {
+    // same caveat as F0_ion_acoustic_electron: the `maxwellian` member is
+    // never initialised, so build the Maxwellian from this object's own pth.
+    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth);
+}
 double F0_ion_acoustic_ion::operator() (double x, double p) {
     // return sqrt(mass) * 1.0 / sqrt(2.0 * M_PI) / pth  * exp(-(p-p_str)*(p-p_str) * mass / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
-    return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p-p_str)*(p-p_str) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
+    return background(p) * ( 1 + amp * cos(k * x ));
     // return 1.0 / sqrt(2.0 * M_PI) / pth * exp(-(p - amp * 0.091* sin(k * x ))*(p- amp *0.091* sin(k * x )) / 2 / pth /pth) * ( 1 + amp * cos(k * x ));
 }
 double F0_ion_acoustic_ion::get_pth() { return pth; }

@@ -988,12 +988,27 @@ void AMRStructure::generate_mesh(std::function<double (double,double)> f,
 void AMRStructure::test_panel(int panel_ind, bool verbose) {
     // cout << "testing panel " << panel_ind << endl;
 
+    // if it's weak LD, do amr based on delta_f, so we subtract f_maxwellian first 
+    // let's try first and build for weak LD, commend out in future for other cases
+    double f_bg[3];
     double panel_fs[9];
     auto panel_it = panels.begin() + panel_ind;
-    for (int ii = 0; ii < 9; ++ii) {
-        // panel_fs[ii] = particles.at(panel_it->get_vertex_ind(ii)).get_f();
-        panel_fs[ii] = fs[panel_it->point_inds[ii]];
+    for (int jv = 0; jv < 3; ++jv) {
+        f_bg[jv] = f0->background(ps[panel_it->point_inds[jv]]);
     }
+    for (int ii = 0; ii < 9; ++ii) {
+        // panel_fs[ii] = fs[panel_it->point_inds[ii]];
+        panel_fs[ii] = fs[panel_it->point_inds[ii]] - f_bg[ii % 3];
+    }
+
+
+    // double panel_fs[9];
+    // auto panel_it = panels.begin() + panel_ind;
+    // for (int ii = 0; ii < 9; ++ii) {
+    //     panel_fs[ii] = fs[panel_it->point_inds[ii]];
+    // }
+
+
     // std::vector<bool> criteria(amr_epsilons.size(), true);
     bool refine_criteria_met = false;
     if (amr_epsilons.size() > 0) {
@@ -1021,12 +1036,12 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
         // }
         // cout << "max_f " << max_f << ", min f " << min_f << endl;
         #endif
-        const double rtol      = amr_epsilons[3];
+        const double rtol      = amr_epsilons[2];
         const double f_ref = std::max(std::fabs(max_f), std::fabs(min_f));
 
         // refine_criteria_met = refine_criteria_met || (max_f - min_f > amr_epsilons[0]);
-        refine_criteria_met = (max_f - min_f > amr_epsilons[0])
-                        || (max_f - min_f > amr_epsilons[3] * f_ref);
+        refine_criteria_met = (max_f - min_f > amr_epsilons[0]);
+                        //  && (max_f - min_f > rtol * f_ref);
     }
 
 
