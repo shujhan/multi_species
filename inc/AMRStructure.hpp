@@ -124,6 +124,19 @@ struct AMRStructure {
     int create_prerefined_mesh_p_refinement();
     void refine_panels(std::function<double (double,double)> f, bool do_adaptive_refine);
     void refine_panels_refine_v(std::function<double (double,double)> f, bool do_adaptive_refine);
+    // directional refinement: one panel at a time, sharing the caller's staging buffers
+    void refine_one_xv(int jj, std::vector<double>& new_xs, std::vector<double>& new_ps,
+                       int& new_vert_ind, std::vector<int>& prospective_leaf_inds,
+                       bool do_adaptive_refine);
+    void refine_one_v (int jj, std::vector<double>& new_xs, std::vector<double>& new_ps,
+                       int& new_vert_ind, std::vector<int>& prospective_leaf_inds,
+                       bool do_adaptive_refine);
+    void refine_one_x (int jj, std::vector<double>& new_xs, std::vector<double>& new_ps,
+                       int& new_vert_ind, std::vector<int>& prospective_leaf_inds,
+                       bool do_adaptive_refine);
+    // descend a shared edge to the abutting leaf and flag it for refinement
+    void flag_v_refinement(int nbr_ind, bool from_left);
+    void flag_x_refinement(int nbr_ind, bool from_below);
     void test_panel(int panel_ind, bool verbose);
 
     int write_particles_to_file(int iter_num);
@@ -234,4 +247,3 @@ struct AMRStructure {
 //                   double L, double epsilon);
 
 #endif /* AMRSTRUCTURE_HPP */
-

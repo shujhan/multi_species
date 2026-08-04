@@ -26,8 +26,11 @@ using std::endl;
  * bottom_nbr_ind
  * 
  * needs_refinement
- * is_refined_xp
+ * needs_refine_x
+ * needs_refine_v
+ * is_refined_x
  * is_refined_p
+ * is_refined_xp
  * child_inds_start
  * 
  * Notes
@@ -49,11 +52,20 @@ struct Panel {
     int which_child;
     int left_nbr_ind, top_nbr_ind, right_nbr_ind, bottom_nbr_ind;
     bool is_left_bdry, is_right_bdry;
-    bool needs_refinement;      // flagged for full xv (4-child) refinement
-    bool needs_refinement_v;    // flagged for v-only (2-child) refinement
-    bool is_refined_xp;
-    bool is_refined_p;
+    bool needs_refinement;
+    bool needs_refine_x;    // direction(s) requested by test_panel
+    bool needs_refine_v;
+    bool is_refined_x;      // 2 children, split in x: [0]=left,   [1]=right
+    bool is_refined_p;      // 2 children, split in v: [0]=bottom, [1]=top
+    bool is_refined_xp;     // 4 children, split in both
     int child_inds_start;
+
+    // A vertical (left/right) edge is only subdivided by a v-split; a
+    // horizontal (top/bottom) edge only by an x-split.  These two queries
+    // are what every edge decision hangs off.
+    bool refined_in_v() const { return is_refined_p || is_refined_xp; }
+    bool refined_in_x() const { return is_refined_x || is_refined_xp; }
+    bool is_leaf()      const { return !(is_refined_x || is_refined_p || is_refined_xp); }
     /**
      * @brief ordering of points and child indices
      * 
@@ -72,6 +84,16 @@ struct Panel {
      *  |      [0]      |
      *  0 ----- 3 ----- 6
      * 
+     *  x refined panel
+     * Stored in the format
+     *  2 ----- 5 ----- 8
+     *  |       |       |
+     *  1  [0]  4  [1]  7
+     *  |       |       |
+     *  0 ----- 3 ----- 6
+     * 
+     * Every child, in all three cases, is itself a 3x3 panel; only the
+     * aspect ratio changes.  Any split costs one level.
      */
 
 
@@ -95,8 +117,9 @@ struct Panel {
 
     void set_point_inds(int p0, int p1, int p2, int p3, int p4, 
                         int p5, int p6, int p7, int p8);
-    void set_child_inds_start(int c0);
-    void set_child_inds_start(int c0, bool refined_v);
+    void set_child_inds_start(int c0);                    // 4 children, x and v
+    void set_child_inds_start(int c0, bool refined_v);    // 2 children, v only
+    void set_child_inds_start_x(int c0);                  // 2 children, x only
 
     void check_if_refinement_needed();
 

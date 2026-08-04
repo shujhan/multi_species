@@ -45,8 +45,11 @@ struct PanelDumpRecord {
     int8_t  is_right_bdry;
     int8_t  is_refined_xp;
     int8_t  is_refined_p;
+    int8_t  is_refined_x;
     int8_t  needs_refinement;
-    int8_t  _pad[3]; // keep 4-byte alignment
+    int8_t  needs_refine_x;
+    int8_t  needs_refine_v;
+    int8_t  _pad[2]; // keep 4-byte alignment
 };
 
 } // anonymous namespace
@@ -83,8 +86,11 @@ int AMRStructure::write_panel_tree_to_file(int iter_num) {
         rec.is_right_bdry     = p.is_right_bdry     ? 1 : 0;
         rec.is_refined_xp     = p.is_refined_xp     ? 1 : 0;
         rec.is_refined_p      = p.is_refined_p      ? 1 : 0;
+        rec.is_refined_x      = p.is_refined_x      ? 1 : 0;
         rec.needs_refinement  = p.needs_refinement  ? 1 : 0;
-        rec._pad[0] = rec._pad[1] = rec._pad[2] = 0;
+        rec.needs_refine_x    = p.needs_refine_x    ? 1 : 0;
+        rec.needs_refine_v    = p.needs_refine_v    ? 1 : 0;
+        rec._pad[0] = rec._pad[1] = 0;
         tree_file.write(reinterpret_cast<const char*>(&rec), sizeof(rec));
     }
 
@@ -187,7 +193,10 @@ int AMRStructure::load_panel_tree_from_file(int iter_num) {
         p.is_right_bdry    = (rec.is_right_bdry    != 0);
         p.is_refined_xp    = (rec.is_refined_xp    != 0);
         p.is_refined_p     = (rec.is_refined_p     != 0);
+        p.is_refined_x     = (rec.is_refined_x     != 0);
         p.needs_refinement = (rec.needs_refinement != 0);
+        p.needs_refine_x   = (rec.needs_refine_x   != 0);
+        p.needs_refine_v   = (rec.needs_refine_v   != 0);
         panels.push_back(p);
     }
 

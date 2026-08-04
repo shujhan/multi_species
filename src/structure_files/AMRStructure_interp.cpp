@@ -88,7 +88,8 @@ verbose=true;
                 }
             } else {
                 Panel* panel_right = &old_panels[panel->right_nbr_ind];
-                if (panel_right->is_refined_xp) { 
+                if (! panel_right->is_leaf()) { 
+                    // left-hand child is cs+0 for an xv-, v- or x-split
                     new_leaf_ind = panel_right->child_inds_start; 
                     if (verbose) {
                         cout << "in panel right children" << endl;
@@ -113,7 +114,8 @@ verbose=true;
                     }
                 } else {
                     Panel* panel_top = &old_panels[panel->top_nbr_ind];
-                    if (panel_top->is_refined_xp) {
+                    if (! panel_top->is_leaf()) {
+                        // bottom child is cs+0 for an xv-, v- or x-split
                         new_leaf_ind = panel_top->child_inds_start;
                         if (verbose) {
                             cout << "in top children" << endl;
@@ -138,7 +140,8 @@ verbose=true;
                         }
                     } else {
                         Panel* panel_bottom = &old_panels[panel->bottom_nbr_ind];
-                        if (panel_bottom -> is_refined_xp) {
+                        if (! panel_bottom->is_leaf()) {
+                            // a top-side child is cs+1 for an xv-, v- or x-split
                             new_leaf_ind = panel_bottom->child_inds_start + 1;
                             if (verbose) {
                                 cout << "in parent bottom children" << endl;
@@ -173,8 +176,10 @@ cout <<"length of panels_list " << old_panels.size() << endl;
                             }
                         } else {
                             Panel* panel_left = &old_panels[panel->left_nbr_ind];
-                            if (panel_left->is_refined_xp) {
-                                new_leaf_ind = panel_left->child_inds_start+2;
+                            if (! panel_left->is_leaf()) {
+                                // right-side child: cs+2 for an xv-split, cs+1 for a 2-child split
+                                new_leaf_ind = panel_left->child_inds_start
+                                             + (panel_left->is_refined_xp ? 2 : 1);
                                 if (verbose) {
                                     cout << "in left children" << endl;
                                     cout << "next leaf test " << new_leaf_ind << endl;
@@ -199,63 +204,15 @@ cout <<"length of panels_list " << old_panels.size() << endl;
             }
             cout << endl;
         }
-        if (new_leaf_ind < 0) {
-            // A -1 parent hop can occur at v/xv mixed interfaces where links were
-            // never set. Fall back to the exact recursive search from the root.
-            if (verbose) {
-                cout << "neighbor walk hit an unset link; searching from root" << endl;
-            }
-            if (bcs == periodic_bcs) {
-                while (tx >= x_max) { tx -= Lx; }
-                while (tx <  x_min) { tx += Lx; }
-            }
-            return find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, 0, verbose);
-        }
         if (history.find(new_leaf_ind) == history.end()) {
             history.emplace(new_leaf_ind);
             if (verbose) {
                 cout << "running find_leaf again for (x,p)=(" << tx << ", " << tp << ")" << endl;
             }
             new_leaf_ind = find_leaf_containing_point_from_neighbor(tx,tp,beyond_boundary, new_leaf_ind, history, verbose);
-        } else 
+        } else if (verbose)
         {
-            if (verbose) {
-                cout << "done searching." << endl;
-            }
-            // At mixed v/xv interfaces the walk can terminate by cycling through
-            // stale links and land on a panel that does NOT contain the point;
-            // biquadratic extrapolation from a far panel then produces huge garbage
-            // values. Verify containment of the final panel; fall back to the exact
-            // recursive search from the root if it fails. Sides with -2 neighbors
-            // are exempt (legitimate boundary extrapolation).
-            Panel* found = &old_panels[new_leaf_ind];
-            double fx_bl = old_xs[found->point_inds[0]]; double fp_bl = old_ps[found->point_inds[0]];
-            double fx_tl = old_xs[found->point_inds[2]]; double fp_tl = old_ps[found->point_inds[2]];
-            double fx_mid = old_xs[found->point_inds[4]];
-            double fx_br = old_xs[found->point_inds[6]]; double fp_br = old_ps[found->point_inds[6]];
-            double fx_tr = old_xs[found->point_inds[8]]; double fp_tr = old_ps[found->point_inds[8]];
-            if (bcs == periodic_bcs) {
-                if (tx - fx_mid >= Lx/2) { tx -= Lx; }
-                if (tx - fx_mid < -Lx/2) { tx += Lx; }
-            }
-            bool f_right  = ((fx_tr - fx_br) * (tp - fp_br) >  (fp_tr - fp_br) * (tx - fx_br)) || found->right_nbr_ind  == -2;
-            bool f_left   = ((fx_tl - fx_bl) * (tp - fp_bl) <= (fp_tl - fp_bl) * (tx - fx_bl)) || found->left_nbr_ind   == -2;
-            bool f_top    = ((fx_tr - fx_tl) * (tp - fp_tl) <  (fp_tr - fp_tl) * (tx - fx_tl)) || found->top_nbr_ind    == -2;
-            bool f_bottom = ((fx_br - fx_bl) * (tp - fp_bl) >= (fp_br - fp_bl) * (tx - fx_bl)) || found->bottom_nbr_ind == -2;
-            if (! (f_right && f_left && f_top && f_bottom) ) {
-                if (verbose) {
-                    cout << "walk terminated on non-containing panel " << new_leaf_ind << "; searching from root" << endl;
-                }
-                if (bcs == periodic_bcs) {
-                    while (tx >= x_max) { tx -= Lx; }
-                    while (tx <  x_min) { tx += Lx; }
-                }
-                new_leaf_ind = find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, 0, verbose);
-            } else if (found->is_refined_xp || found->is_refined_p) {
-                // walk stopped on a refined panel it reached through a stale or
-                // parent link; descend to the containing leaf
-                new_leaf_ind = find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, new_leaf_ind, verbose);
-            }
+            cout << "done searching." << endl;
         }
         if (!allow_boundary_extrapolation) {
             bool boundary_extrapolating_right = !ineq_right && panel->right_nbr_ind==-2;
@@ -294,12 +251,22 @@ int AMRStructure::find_leaf_containing_xp_recursively(double  &x, const double &
     Panel* panel = &(old_panels[panel_ind]);
     child_inds_start = panel->child_inds_start;
 
+    // Map the geometric quadrant (0=BL, 1=TL, 2=BR, 3=TR) onto this panel's
+    // child list.  A 4-way split keeps all four; a v-split collapses the two
+    // x-halves onto one child; an x-split collapses the two v-halves.
+    int q_child[4] = {0, 1, 2, 3};
+    if (panel->is_refined_p) {          // [0]=bottom, [1]=top   -> keep the v bit
+        q_child[0] = 0; q_child[1] = 1; q_child[2] = 0; q_child[3] = 1;
+    } else if (panel->is_refined_x) {   // [0]=left,   [1]=right -> keep the x bit
+        q_child[0] = 0; q_child[1] = 0; q_child[2] = 1; q_child[3] = 1;
+    }
+
     if (verbose) {
         cout << "In panel " << panel_ind << endl;
         cout << *panel << endl;
         cout << "testing (x,p)=(" << x << ", " << p << ")" << endl;
     }
-    if (! (panel->is_refined_xp || panel->is_refined_p ) ) {
+    if (panel->is_leaf()) {
         leaf_ind = panel_ind;
         if (verbose) {
             cout << "leaf panel!" << endl;
@@ -351,13 +318,13 @@ int AMRStructure::find_leaf_containing_xp_recursively(double  &x, const double &
         if (ineq_1_bottom && ineq_1_right) {
 
             bool ineq_1_top = (x_tm - x_tl) * (p - p_tl) <= (p_tm - p_tl) * (x - x_tl);
-            Panel* child_1 = &old_panels[child_inds_start+1];
+            Panel* child_1 = &old_panels[child_inds_start + q_child[1]];
             int child_1_top_nbr_ind = child_1->top_nbr_ind;
             if (ineq_1_top ||  child_1_top_nbr_ind < 0) {
                 bool ineq_1_left = (x_tl - x_ml) * (p - p_ml) <= (p_tl - p_ml) * (x - x_ml);
                 int child_1_left_nbr_ind = child_1->left_nbr_ind;
                 if (ineq_1_left || child_1_left_nbr_ind < 0) {
-                    subpanel_ind = child_inds_start + 1;
+                    subpanel_ind = child_inds_start + q_child[1];
                     if (verbose) {
                         cout << "in child 1, panel " << subpanel_ind << endl;
                     }
@@ -375,23 +342,13 @@ int AMRStructure::find_leaf_containing_xp_recursively(double  &x, const double &
         } else if (ineq_3_bottom && !ineq_1_right)
         {
             bool ineq_3_top = (x_tr - x_tm) * (p - p_tm) <= (p_tr - p_tm) * (x - x_tm);
-            Panel* child_3;
-            if (panel->is_refined_p) {
-                child_3 = &old_panels[child_inds_start +1];
-            } else { // panel is refined in xv
-                child_3 = &old_panels[child_inds_start+3];
-            }
+            Panel* child_3 = &old_panels[child_inds_start + q_child[3]];
             int child_3_top_nbr_ind = child_3->top_nbr_ind;
             if (ineq_3_top || child_3_top_nbr_ind < 0) {
                 bool ineq_3_right = (x_tr - x_mr) * (p - p_mr) <= (p_tr - p_mr) * (x - x_mr);
                 int child_3_right_nbr_ind = child_3->right_nbr_ind;
                 if (!ineq_3_right || child_3_right_nbr_ind < 0) {
-                    if (panel->is_refined_p) {
-                        subpanel_ind = child_inds_start + 1;
-                    }
-                    else {
-                        subpanel_ind = child_inds_start + 3;
-                    }
+                    subpanel_ind = child_inds_start + q_child[3];
                     if (verbose) {
                         cout << "in child 3, panel " << subpanel_ind << endl;
                     }
@@ -412,14 +369,14 @@ int AMRStructure::find_leaf_containing_xp_recursively(double  &x, const double &
             }
             if (ineq_0_right) {
                 bool ineq_0_bottom = (x_bm - x_bl) * (p - p_bl) >= (p_bm - p_bl) * (x - x_bl);
-                Panel* child_0 = &old_panels[child_inds_start];
+                Panel* child_0 = &old_panels[child_inds_start + q_child[0]];
                 int child_0_bottom_nbr_ind = child_0->bottom_nbr_ind;
                 if (ineq_0_bottom || child_0_bottom_nbr_ind < 0) {
                     bool ineq_0_left = (x_ml - x_bl) * (p - p_bl) <= (p_ml - p_bl) * (x - x_bl);
                     int child_0_left_nbr_ind = child_0->left_nbr_ind;
                     if (ineq_0_left || child_0_left_nbr_ind < 0) {
                         
-                        subpanel_ind = child_inds_start;
+                        subpanel_ind = child_inds_start + q_child[0];
                         if (verbose) {
                             cout << "in child 0, panel " << subpanel_ind << endl;
                         }
@@ -434,22 +391,13 @@ int AMRStructure::find_leaf_containing_xp_recursively(double  &x, const double &
             } else
             {
                 bool ineq_2_bottom = (x_br - x_bm) * (p - p_bm) >= (p_br - p_bm) * (x - x_bm);
-                Panel* child_2;
-                if (panel->is_refined_p) {
-                     child_2 = &old_panels[child_inds_start];
-                } else { // panel is refined in x and v
-                     child_2 = &old_panels[child_inds_start+2];
-                }
+                Panel* child_2 = &old_panels[child_inds_start + q_child[2]];
                 int child_2_bottom_nbr_ind = child_2->bottom_nbr_ind;
                 if (ineq_2_bottom || child_2_bottom_nbr_ind < 0) {
                     bool ineq_2_right = (x_mr - x_br) * (p - p_br) <= (p_mr - p_br) * (x - x_br);
                     int child_2_right_nbr_ind = child_2->right_nbr_ind;
                     if (! ineq_2_right || child_2_right_nbr_ind < 0) {
-                        if (panel->is_refined_p) {
-                            subpanel_ind = child_inds_start;
-                        } else {
-                            subpanel_ind = child_inds_start + 2;
-                        }
+                        subpanel_ind = child_inds_start + q_child[2];
                         if (verbose) {
                             cout << "in child 2, panel " << subpanel_ind << endl;
                         }
