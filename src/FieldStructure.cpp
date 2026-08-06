@@ -464,11 +464,11 @@ void E_MQ_Treecode::compute_RHS_BLTC() {
 #pragma acc exit data delete(leaf_members[0:2][0:leaf_count])
 #endif
 
-    delete[] tree_members[0];
-    delete[] tree_members[1];
+    delete[] tree_members[0];  tree_members[0] = nullptr;
+    delete[] tree_members[1];  tree_members[1] = nullptr;
 
-    delete[] leaf_members[0];
-    delete[] leaf_members[1];
+    delete[] leaf_members[0];  leaf_members[0] = nullptr;
+    delete[] leaf_members[1];  leaf_members[1] = nullptr;
 
 //========= Change back to original order =====================
     double* lambda_temp;
@@ -763,11 +763,11 @@ void E_MQ_Treecode::free_interaction_list()
         delete[] interaction_list_near[leaf_index];
     }
 
-    delete[] interaction_list_far;
-    delete[] interaction_list_near;
+    delete[] interaction_list_far;        interaction_list_far = nullptr;
+    delete[] interaction_list_near;       interaction_list_near = nullptr;
 
-    delete[] interaction_list_far_size;
-    delete[] interaction_list_near_size;
+    delete[] interaction_list_far_size;   interaction_list_far_size = nullptr;
+    delete[] interaction_list_near_size;  interaction_list_near_size = nullptr;
 }
 
 
@@ -879,8 +879,8 @@ void E_MQ_Treecode::free_cluster_list()
         delete[] cluster_list_moments[tree_index];
     }
 
-    delete[] cluster_list_t1;
-    delete[] cluster_list_moments;
+    delete[] cluster_list_t1;       cluster_list_t1 = nullptr;
+    delete[] cluster_list_moments;  cluster_list_moments = nullptr;
 }
 
 

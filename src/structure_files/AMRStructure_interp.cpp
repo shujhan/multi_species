@@ -25,6 +25,11 @@ verbose=true;
     // verbose = true;
     // end trouble shooting verbosity change
 
+    // Retired: interpolate_to_initial_xps now root-searches every point.
+    // Guarded so that a stale call can never dereference a sentinel index.
+    if (leaf_ind < 0 || leaf_ind >= (int) old_panels.size()) {
+        return find_leaf_containing_xp_recursively(tx, tp, beyond_boundary, 0, verbose);
+    }
     if (leaf_ind == 0) {
         history.emplace(leaf_ind);
         cout << "If you see this then you are sending in a leaf ind 0 somewhere you hoped not to." << endl;
@@ -633,8 +638,13 @@ cout << "searching first column" << endl;
             #ifdef DEBUG_L2
             cout << "testing point " << point_ind << ", x= " << sortxs[point_ind] << ", p= " << sortps[point_ind] << endl;
             #endif
-            leaf_ind = find_leaf_containing_point_from_neighbor(sortxs[point_ind], sortps[point_ind], beyond_boundary, 
-                                                                leaf_ind, history, verbose);
+            // Root search.  The neighbour walk that used to live here relied
+            // on "-1 means my parent has the answer" and on fixed child
+            // index offsets, both of which assume one tree level == one
+            // level of refinement in every direction.  Directional splits
+            // break both assumptions at once, so the walk is retired.
+            leaf_ind = find_leaf_containing_xp_recursively(sortxs[point_ind], sortps[point_ind],
+                                                          beyond_boundary, 0, verbose);
             first_column_leaf_inds[ii] = leaf_ind;
             // point_in_leaf_panels_by_inds[leaf_ind].push_back(point_ind);
             if (beyond_boundary) {
@@ -704,7 +714,8 @@ cout << "after first column" << endl;
             #endif
             std::set<int> history;
             history.emplace(leaf_ind_c);
-            leaf_ind_c = find_leaf_containing_point_from_neighbor(sortxs[point_ind], sortps[point_ind], beyond_boundary, leaf_ind_c, history, verbose);
+            leaf_ind_c = find_leaf_containing_xp_recursively(sortxs[point_ind], sortps[point_ind],
+                                                            beyond_boundary, 0, verbose);
             // point_in_leaf_panels_by_inds[leaf_ind_c].push_back(point_ind);
             if (beyond_boundary) {
                 leaf_panel_of_points[point_ind] = 0;

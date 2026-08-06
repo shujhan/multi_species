@@ -67,7 +67,7 @@ struct AMRStructure {
 
     // initial condition
     //std::function<double (double,double)> f0;
-    distribution* f0;
+    distribution* f0 = nullptr;
 
     // mesh parameters
     int initial_height;
@@ -134,6 +134,36 @@ struct AMRStructure {
     void refine_one_x (int jj, std::vector<double>& new_xs, std::vector<double>& new_ps,
                        int& new_vert_ind, std::vector<int>& prospective_leaf_inds,
                        bool do_adaptive_refine);
+    // ---- directional shared-edge point lookup --------------------------
+    //  A panel that splits needs points on the edges perpendicular to the
+    //  split.  Each such point may already exist on the neighbour's side.
+    //  lookup_edge_point answers "does it exist, and if so what index" by
+    //  descending the neighbour subtree; it is a loop rather than the two
+    //  nested ifs of the isotropic scheme, because an x-split can now sit
+    //  between a panel and the v-refinement it is looking for (and vice
+    //  versa) without changing the neighbour's level in the governing
+    //  direction.
+    enum PanelEdge { EDGE_LEFT = 0, EDGE_RIGHT = 1, EDGE_BOTTOM = 2, EDGE_TOP = 3 };
+
+    // During a refinement pass, points created earlier in the same sweep
+    // are still sitting in the staging buffers and are NOT yet in xs/ps.
+    // A neighbour panel created earlier in this sweep can therefore hold
+    // point indices past the end of xs, so every coordinate read inside
+    // the lookup goes through these accessors.
+    const std::vector<double>* staged_xs = nullptr;
+    const std::vector<double>* staged_ps = nullptr;
+    double point_x(int ind) const;
+    double point_v(int ind) const;
+
+    int  edge_nbr_ind   (const Panel& P, int edge) const;
+    void set_edge_nbr   (Panel& P, int edge, int val);
+    int  facing_edge_hit(const Panel& Q, int edge, double target) const;
+    int  child_toward   (const Panel& Q, int edge, double target) const;
+    // returns the point index, or -1 if the point must be created.
+    // found_panel_ind receives the abutting neighbour panel (or -1).
+    int  lookup_edge_point(int panel_ind, int edge, double target,
+                           int& found_panel_ind);
+
     // descend a shared edge to the abutting leaf and flag it for refinement
     void flag_v_refinement(int nbr_ind, bool from_left);
     void flag_x_refinement(int nbr_ind, bool from_below);

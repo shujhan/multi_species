@@ -101,11 +101,15 @@ int AMRStructure::create_prerefined_mesh_p_refinement() {
     for (int level = 1; level < p_height; ++level) {
         int num_panels_pre_refine = panels.size();
 
+        // route the uniform v pre-refinement through the same dispatch the
+        // adaptive passes use, so there is only one v-split implementation
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
             panel_it->needs_refinement = true;
+            panel_it->needs_refine_x  = false;
+            panel_it->needs_refine_v  = true;
         }
         bool do_adaptive_refine = false;
-        refine_panels_refine_v( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
+        refine_panels( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
         minimum_unrefined_index = num_panels_pre_refine;
 
     }
@@ -114,6 +118,8 @@ int AMRStructure::create_prerefined_mesh_p_refinement() {
 
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
             panel_it->needs_refinement = true;
+            panel_it->needs_refine_x  = true;
+            panel_it->needs_refine_v  = true;
         }
         refine_panels( [] (double x, double v) {return 1.0;} , false);
         minimum_unrefined_index = num_panels_pre_refine;
@@ -208,6 +214,8 @@ int AMRStructure::create_prerefined_mesh() {
 
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
             panel_it->needs_refinement = true;
+            panel_it->needs_refine_x  = true;
+            panel_it->needs_refine_v  = true;
         }
         refine_panels( [] (double x, double v) {return 1.0;} , false);
         minimum_unrefined_index = num_panels_pre_refine;
@@ -215,11 +223,15 @@ int AMRStructure::create_prerefined_mesh() {
     for (int level = 0; level < p_height; ++level) {
         int num_panels_pre_refine = panels.size();
 
+        // route the uniform v pre-refinement through the same dispatch the
+        // adaptive passes use, so there is only one v-split implementation
         for (auto panel_it = panels.begin() + minimum_unrefined_index; panel_it != panels.end(); ++panel_it) {
             panel_it->needs_refinement = true;
+            panel_it->needs_refine_x  = false;
+            panel_it->needs_refine_v  = true;
         }
         bool do_adaptive_refine = false;
-        refine_panels_refine_v( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
+        refine_panels( [] (double x, double v) {return 1.0;} , do_adaptive_refine);
         minimum_unrefined_index = num_panels_pre_refine;
     }
 
@@ -565,9 +577,38 @@ void AMRStructure::flag_x_refinement(int nbr_ind, bool from_below) {
 }
 
 
+// =====================================================================
+//  Directional refinement.
+//
+//  All three routines have the same shape:
+//
+//    1. copy everything needed out of the parent, because push_back on
+//       `panels` invalidates any reference into it;
+//    2. for each point on a subdivided edge, ask lookup_edge_point
+//       whether the neighbour already has it, and create it if not;
+//    3. create the interior points unconditionally -- they are interior
+//       to the parent, so nobody else can own them;
+//    4. push the children and wire the neighbour pointers.
+//
+//  Edge bookkeeping follows one rule:
+//
+//    live edge  (subdivided by this split) -> the child's neighbour is
+//        whatever lookup_edge_point landed on, or -1 if it found nothing
+//        (which means everything across that edge is coarser than the
+//        child);
+//    quiet edge (untouched by this split)  -> the child's edge IS the
+//        parent's edge, so inherit the parent's pointer verbatim.
+//
+//  That second line is the whole correction relative to the previous
+//  version, which wrote -1 on quiet edges whenever the neighbour was
+//  refined in the perpendicular direction.  That claimed "coarser" about
+//  a neighbour that was actually finer, and the leaf search then walked
+//  off the front of the panel array.
+// =====================================================================
+
+
 // ---------------------------------------------------------------------
-//  Split a panel in x and v -> 4 children.  This is the original FARSIGHT
-//  refinement, with the neighbour queries made direction-aware.
+//  Split in x and v -> 4 children, [0]=BL [1]=TL [2]=BR [3]=TR.
 // ---------------------------------------------------------------------
 void AMRStructure::refine_one_xv(int jj,
                                  std::vector<double>& new_xs,
@@ -576,266 +617,113 @@ void AMRStructure::refine_one_xv(int jj,
                                  std::vector<int>& prospective_leaf_inds,
                                  bool do_adaptive_refine)
 {
-    Panel* panel = &(panels[jj]);
+    int pi[9];
+    for (int ii = 0; ii < 9; ++ii) { pi[ii] = panels[jj].point_inds[ii]; }
+    const double x0 = xs[pi[0]], xm = xs[pi[3]], x1 = xs[pi[6]];
+    const double v0 = ps[pi[0]], vm = ps[pi[1]], v1 = ps[pi[2]];
+    const double q1 = 0.5 * (v0 + vm), q3 = 0.5 * (vm + v1);
+    const double m1 = 0.5 * (x0 + xm), m3 = 0.5 * (xm + x1);
 
-    double panel_xs[9], panel_ps[9];
-    for (int ii = 0; ii < 9; ++ii) {
-        int point_ind = panel->point_inds[ii];
-        panel_xs[ii] = xs[point_ind];
-        panel_ps[ii] = ps[point_ind];
-    }
-    double dx = panel_xs[3] - panel_xs[0];
-    double dp = panel_ps[1] - panel_ps[0];
-    double sub_dx = 0.5 * dx;
-    double sub_dp = 0.5 * dp;
+    const int nbrL = panels[jj].left_nbr_ind;
+    const int nbrR = panels[jj].right_nbr_ind;
+    const int nbrB = panels[jj].bottom_nbr_ind;
+    const int nbrT = panels[jj].top_nbr_ind;
+    const bool p_left_bdry  = panels[jj].is_left_bdry;
+    const bool p_right_bdry = panels[jj].is_right_bdry;
+    const int child_level   = panels[jj].level + 1;
+    const int panel_ind     = panels[jj].panel_ind;
 
-    int num_new_panels = panels.size();
-    double subpanel_xs[5], subpanel_ps[5];
-    for (int ii = 0; ii < 5; ++ii) {
-        subpanel_xs[ii] = panel_xs[0] + sub_dx * ii;
-        subpanel_ps[ii] = panel_ps[0] + sub_dp * ii;
-    }
+    const int c0 = (int) panels.size(), c1 = c0 + 1, c2 = c0 + 2, c3 = c0 + 3;
 
-    int point_9_ind, point_10_ind, point_11_ind, point_15_ind,
-        point_18_ind, point_22_ind, point_23_ind, point_24_ind;
-    int child_0_bottom_nbr_ind = -1;
-    int child_0_left_nbr_ind   = -1;
-    int child_1_left_nbr_ind   = -1;
-    int child_1_top_nbr_ind    = -1;
-    int child_2_bottom_nbr_ind = -1;
-    int child_2_right_nbr_ind  = -1;
-    int child_3_right_nbr_ind  = -1;
-    int child_3_top_nbr_ind    = -1;
+    auto make_point = [&](double px, double pv) -> int {
+        new_xs.push_back(px); new_ps.push_back(pv);
+        return new_vert_ind++;
+    };
+    auto edge_point = [&](int edge, double target,
+                          double px, double pv, int& found) -> int {
+        int ind = lookup_edge_point(jj, edge, target, found);
+        return (ind >= 0) ? ind : make_point(px, pv);
+    };
+    auto child_nbr = [](int parent_slot, int found) -> int {
+        return (parent_slot == -2) ? -2 : found;
+    };
 
-    // ---- LEFT edge (live): needs the neighbour refined in v -------------
-    if (panel->left_nbr_ind == -2) {
-        child_0_left_nbr_ind = -2;
-        child_1_left_nbr_ind = -2;
-        point_9_ind  = new_vert_ind++;
-        point_10_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else if (panel->left_nbr_ind == -1) {
-        flag_v_refinement(panels[panel->parent_ind].left_nbr_ind, true);
-        point_9_ind  = new_vert_ind++;
-        point_10_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else {
-        Panel* panel_left = &(panels[panel->left_nbr_ind]);
-        if (! panel_left->refined_in_v()) {
-            point_9_ind  = new_vert_ind++;
-            point_10_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-            new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-        } else {
-            int cs = panel_left->child_inds_start;
-            // children of the left neighbour abutting our left edge:
-            //   xv-refined -> its bottom-right / top-right children (cs+2, cs+3)
-            //   v-refined  -> its bottom / top children              (cs+0, cs+1)
-            child_0_left_nbr_ind = panel_left->is_refined_xp ? cs + 2 : cs + 0;
-            child_1_left_nbr_ind = panel_left->is_refined_xp ? cs + 3 : cs + 1;
-            panels[child_0_left_nbr_ind].right_nbr_ind = num_new_panels;
-            panels[child_1_left_nbr_ind].right_nbr_ind = num_new_panels + 1;
-            if (panel->is_left_bdry && bcs == periodic_bcs) {
-                // periodic image: same v, x differs by Lx, so the points are distinct
-                point_9_ind  = new_vert_ind++;
-                point_10_ind = new_vert_ind++;
-                new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-                new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            } else {
-                point_9_ind  = panels[child_0_left_nbr_ind].point_inds[7];
-                point_10_ind = panels[child_1_left_nbr_ind].point_inds[7];
-            }
-        }
-    }
+    int fL0 = -1, fL1 = -1, fR0 = -1, fR1 = -1;
+    int fB0 = -1, fB1 = -1, fT0 = -1, fT1 = -1;
 
-    // ---- BOTTOM edge (live): needs the neighbour refined in x -----------
-    if (panel->bottom_nbr_ind == -2) {
-        child_0_bottom_nbr_ind = -2;
-        child_2_bottom_nbr_ind = -2;
-        point_11_ind = new_vert_ind++;
-        point_18_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-    } else if (panel->bottom_nbr_ind == -1) {
-        flag_x_refinement(panels[panel->parent_ind].bottom_nbr_ind, true);
-        point_11_ind = new_vert_ind++;
-        point_18_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-    } else {
-        Panel* panel_bottom = &(panels[panel->bottom_nbr_ind]);
-        if (! panel_bottom->refined_in_x()) {
-            point_11_ind = new_vert_ind++;
-            point_18_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-            new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-        } else {
-            int cs = panel_bottom->child_inds_start;
-            // top children of the bottom neighbour:
-            //   xv-refined -> cs+1 (top-left), cs+3 (top-right)
-            //   x-refined  -> cs+0 (left),     cs+1 (right)
-            child_0_bottom_nbr_ind = panel_bottom->is_refined_xp ? cs + 1 : cs + 0;
-            child_2_bottom_nbr_ind = panel_bottom->is_refined_xp ? cs + 3 : cs + 1;
-            panels[child_0_bottom_nbr_ind].top_nbr_ind = num_new_panels;
-            panels[child_2_bottom_nbr_ind].top_nbr_ind = num_new_panels + 2;
-            point_11_ind = panels[child_0_bottom_nbr_ind].point_inds[5];
-            point_18_ind = panels[child_2_bottom_nbr_ind].point_inds[5];
-        }
-    }
+    int pL0 = edge_point(EDGE_LEFT,   q1, x0, q1, fL0);
+    int pL1 = edge_point(EDGE_LEFT,   q3, x0, q3, fL1);
+    int pR0 = edge_point(EDGE_RIGHT,  q1, x1, q1, fR0);
+    int pR1 = edge_point(EDGE_RIGHT,  q3, x1, q3, fR1);
+    int pB0 = edge_point(EDGE_BOTTOM, m1, m1, v0, fB0);
+    int pB1 = edge_point(EDGE_BOTTOM, m3, m3, v0, fB1);
+    int pT0 = edge_point(EDGE_TOP,    m1, m1, v1, fT0);
+    int pT1 = edge_point(EDGE_TOP,    m3, m3, v1, fT1);
 
-    // ---- TOP edge (live): needs the neighbour refined in x --------------
-    if (panel->top_nbr_ind == -2) {
-        child_1_top_nbr_ind = -2;
-        child_3_top_nbr_ind = -2;
-        point_15_ind = new_vert_ind++;
-        point_22_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-    } else if (panel->top_nbr_ind == -1) {
-        flag_x_refinement(panels[panel->parent_ind].top_nbr_ind, false);
-        point_15_ind = new_vert_ind++;
-        point_22_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-    } else {
-        Panel* panel_top = &(panels[panel->top_nbr_ind]);
-        if (! panel_top->refined_in_x()) {
-            point_15_ind = new_vert_ind++;
-            point_22_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-            new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-        } else {
-            int cs = panel_top->child_inds_start;
-            // bottom children of the top neighbour:
-            //   xv-refined -> cs+0 (bottom-left), cs+2 (bottom-right)
-            //   x-refined  -> cs+0 (left),        cs+1 (right)
-            child_1_top_nbr_ind = cs + 0;
-            child_3_top_nbr_ind = panel_top->is_refined_xp ? cs + 2 : cs + 1;
-            panels[child_1_top_nbr_ind].bottom_nbr_ind = num_new_panels + 1;
-            panels[child_3_top_nbr_ind].bottom_nbr_ind = num_new_panels + 3;
-            point_15_ind = panels[child_1_top_nbr_ind].point_inds[3];
-            point_22_ind = panels[child_3_top_nbr_ind].point_inds[3];
-        }
-    }
+    // interior: 8 points, never shared with anyone
+    int i0 = make_point(m1, q1);
+    int i1 = make_point(m1, vm);
+    int i2 = make_point(m1, q3);
+    int i3 = make_point(xm, q1);
+    int i4 = make_point(xm, q3);
+    int i5 = make_point(m3, q1);
+    int i6 = make_point(m3, vm);
+    int i7 = make_point(m3, q3);
 
-    // ---- RIGHT edge (live): needs the neighbour refined in v ------------
-    if (panel->right_nbr_ind == -2) {
-        child_2_right_nbr_ind = -2;
-        child_3_right_nbr_ind = -2;
-        point_23_ind = new_vert_ind++;
-        point_24_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else if (panel->right_nbr_ind == -1) {
-        flag_v_refinement(panels[panel->parent_ind].right_nbr_ind, false);
-        point_23_ind = new_vert_ind++;
-        point_24_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else {
-        Panel* panel_right = &(panels[panel->right_nbr_ind]);
-        if (! panel_right->refined_in_v()) {
-            point_23_ind = new_vert_ind++;
-            point_24_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-            new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            if (panel->right_nbr_ind == jj) {   // single panel in x, periodic: self-neighbour
-                child_2_right_nbr_ind = num_new_panels;
-                child_0_left_nbr_ind  = num_new_panels + 2;
-                child_3_right_nbr_ind = num_new_panels + 1;
-                child_1_left_nbr_ind  = num_new_panels + 3;
-            }
-        } else {
-            int cs = panel_right->child_inds_start;
-            // left children of the right neighbour are cs+0, cs+1 for BOTH
-            // the v-refined and xv-refined cases
-            child_2_right_nbr_ind = cs + 0;
-            child_3_right_nbr_ind = cs + 1;
-            panels[child_2_right_nbr_ind].left_nbr_ind = num_new_panels + 2;
-            panels[child_3_right_nbr_ind].left_nbr_ind = num_new_panels + 3;
-            if (panel->is_right_bdry && bcs == periodic_bcs) {
-                point_23_ind = new_vert_ind++;
-                point_24_ind = new_vert_ind++;
-                new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-                new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            } else {
-                point_23_ind = panels[child_2_right_nbr_ind].point_inds[1];
-                point_24_ind = panels[child_3_right_nbr_ind].point_inds[1];
-            }
-        }
-    }
+    int c0L = child_nbr(nbrL, fL0), c1L = child_nbr(nbrL, fL1);
+    int c2R = child_nbr(nbrR, fR0), c3R = child_nbr(nbrR, fR1);
+    int c0B = child_nbr(nbrB, fB0), c2B = child_nbr(nbrB, fB1);
+    int c1T = child_nbr(nbrT, fT0), c3T = child_nbr(nbrT, fT1);
 
-    // ---- interior points (never shared, 8 of them) ----------------------
-    int point_12_ind = new_vert_ind;
-    int point_16_ind = point_12_ind + 3;
-    int point_19_ind = point_16_ind + 2;
-    for (int ii = 0; ii < 3; ++ii) {
-        new_xs.push_back(subpanel_xs[1]);
-        new_ps.push_back(subpanel_ps[1+ii]);
-    }
-    for (int ii = 0; ii < 2; ++ii) {
-        new_xs.push_back(subpanel_xs[2]);
-        new_ps.push_back(subpanel_ps[1+2*ii]);
-    }
-    for (int ii = 0; ii < 3; ++ii) {
-        new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[1+ii]);
-    }
-    new_vert_ind += 8;
+    // single panel across x with periodic bcs: the panel is its own
+    // left and right neighbour, so the children wrap onto each other
+    if (nbrR == jj) { c2R = c0; c3R = c1; }
+    if (nbrL == jj) { c0L = c2; c1L = c3; }
+
+    panels.push_back(Panel {c0, child_level, panel_ind, 0,
+            pi[0], pL0,  pi[1],
+            pB0,   i0,   i1,
+            pi[3], i3,   pi[4],
+            c0L, c1, c2, c0B,
+            p_left_bdry, false});
+    panels.push_back(Panel {c1, child_level, panel_ind, 1,
+            pi[1], pL1,  pi[2],
+            i1,    i2,   pT0,
+            pi[4], i4,   pi[5],
+            c1L, c1T, c3, c0,
+            p_left_bdry, false});
+    panels.push_back(Panel {c2, child_level, panel_ind, 2,
+            pi[3], i3,   pi[4],
+            pB1,   i5,   i6,
+            pi[6], pR0,  pi[7],
+            c0, c3, c2R, c2B,
+            false, p_right_bdry});
+    panels.push_back(Panel {c3, child_level, panel_ind, 3,
+            pi[4], i4,   pi[5],
+            i6,    i7,   pT1,
+            pi[7], pR1,  pi[8],
+            c1, c3T, c3R, c2,
+            false, p_right_bdry});
+
+    if (fL0 >= 0) { panels[fL0].right_nbr_ind  = c0; }
+    if (fL1 >= 0) { panels[fL1].right_nbr_ind  = c1; }
+    if (fR0 >= 0) { panels[fR0].left_nbr_ind   = c2; }
+    if (fR1 >= 0) { panels[fR1].left_nbr_ind   = c3; }
+    if (fB0 >= 0) { panels[fB0].top_nbr_ind    = c0; }
+    if (fB1 >= 0) { panels[fB1].top_nbr_ind    = c2; }
+    if (fT0 >= 0) { panels[fT0].bottom_nbr_ind = c1; }
+    if (fT1 >= 0) { panels[fT1].bottom_nbr_ind = c3; }
 
     if (do_adaptive_refine) {
-        for (int ii = num_new_panels; ii < num_new_panels + 4; ++ii) {
-            prospective_leaf_inds.push_back(ii);
-        }
+        for (int ii = c0; ii <= c3; ++ii) { prospective_leaf_inds.push_back(ii); }
     }
-    panel->set_child_inds_start(num_new_panels);
-
-    // Copy everything still needed out of *panel BEFORE any push_back, which
-    // can reallocate `panels` and invalidate `panel`.
-    int child_level = panel->level + 1;
-    int panel_ind   = panel->panel_ind;
-    int point_inds[9];
-    for (int ii = 0; ii < 9; ++ii) { point_inds[ii] = panel->point_inds[ii]; }
-    bool p_is_left_bdry  = panel->is_left_bdry;
-    bool p_is_right_bdry = panel->is_right_bdry;
-
-    panels.push_back(Panel {num_new_panels, child_level, panel_ind, 0,
-            point_inds[0], point_9_ind, point_inds[1],
-            point_11_ind, point_12_ind, point_12_ind + 1,
-            point_inds[3], point_16_ind, point_inds[4],
-            child_0_left_nbr_ind, num_new_panels + 1,
-            num_new_panels + 2, child_0_bottom_nbr_ind,
-            p_is_left_bdry, false});
-    panels.push_back(Panel {num_new_panels+1, child_level, panel_ind, 1,
-            point_inds[1], point_10_ind, point_inds[2],
-            point_12_ind+1, point_12_ind+2, point_15_ind,
-            point_inds[4], point_16_ind+1, point_inds[5],
-            child_1_left_nbr_ind, child_1_top_nbr_ind,
-            num_new_panels + 3, num_new_panels,
-            p_is_left_bdry, false});
-    panels.push_back(Panel {num_new_panels+2, child_level, panel_ind, 2,
-            point_inds[3], point_16_ind, point_inds[4],
-            point_18_ind, point_19_ind, point_19_ind+1,
-            point_inds[6], point_23_ind, point_inds[7],
-            num_new_panels, num_new_panels+3,
-            child_2_right_nbr_ind, child_2_bottom_nbr_ind,
-            false, p_is_right_bdry});
-    panels.push_back(Panel {num_new_panels+3, child_level, panel_ind, 3,
-            point_inds[4], point_16_ind+1, point_inds[5],
-            point_19_ind+1, point_19_ind+2, point_22_ind,
-            point_inds[7], point_24_ind, point_inds[8],
-            num_new_panels+1, child_3_top_nbr_ind,
-            child_3_right_nbr_ind, num_new_panels+2,
-            false, p_is_right_bdry});
+    panels[jj].set_child_inds_start(c0);
 }
 
 
 // ---------------------------------------------------------------------
-//  Split a panel in v only -> 2 children, [0] = bottom, [1] = top.
-//  Adds 6 points: 2 on the left edge, 2 on the right edge, 2 interior
-//  (the two children's centres).  Top and bottom are quiet edges.
+//  Split in v -> 2 children, [0]=bottom [1]=top.
+//  Live edges: left, right.   Quiet edges: bottom, top.
 // ---------------------------------------------------------------------
 void AMRStructure::refine_one_v(int jj,
                                 std::vector<double>& new_xs,
@@ -844,218 +732,89 @@ void AMRStructure::refine_one_v(int jj,
                                 std::vector<int>& prospective_leaf_inds,
                                 bool do_adaptive_refine)
 {
-    Panel* panel = &(panels[jj]);
+    int pi[9];
+    for (int ii = 0; ii < 9; ++ii) { pi[ii] = panels[jj].point_inds[ii]; }
+    const double x0 = xs[pi[0]], xm = xs[pi[3]], x1 = xs[pi[6]];
+    const double v0 = ps[pi[0]], vm = ps[pi[1]], v1 = ps[pi[2]];
+    const double q1 = 0.5 * (v0 + vm), q3 = 0.5 * (vm + v1);
 
-    double panel_xs[9], panel_ps[9];
-    for (int ii = 0; ii < 9; ++ii) {
-        int point_ind = panel->point_inds[ii];
-        panel_xs[ii] = xs[point_ind];
-        panel_ps[ii] = ps[point_ind];
-    }
-    double dx = panel_xs[3] - panel_xs[0];
-    double dp = panel_ps[1] - panel_ps[0];
-    double sub_dx = 0.5 * dx;
-    double sub_dp = 0.5 * dp;
+    const int nbrL = panels[jj].left_nbr_ind;
+    const int nbrR = panels[jj].right_nbr_ind;
+    const int nbrB = panels[jj].bottom_nbr_ind;
+    const int nbrT = panels[jj].top_nbr_ind;
+    const bool p_left_bdry  = panels[jj].is_left_bdry;
+    const bool p_right_bdry = panels[jj].is_right_bdry;
+    const int child_level   = panels[jj].level + 1;
+    const int panel_ind     = panels[jj].panel_ind;
 
-    int num_new_panels = panels.size();
-    double subpanel_xs[5], subpanel_ps[5];
-    for (int ii = 0; ii < 5; ++ii) {
-        subpanel_xs[ii] = panel_xs[0] + sub_dx * ii;
-        subpanel_ps[ii] = panel_ps[0] + sub_dp * ii;
-    }
-    //   2 ------- 5 ------- 8
-    //
-    //  10 ------ 12 ------ 14        <- new row, centre of the top child
-    //
-    //   1 ------- 4 ------- 7        <- split line, points already exist
-    //
-    //   9 ------ 11 ------ 13        <- new row, centre of the bottom child
-    //
-    //   0 ------- 3 ------- 6
+    const int c0 = (int) panels.size(), c1 = c0 + 1;
 
-    int point_9_ind, point_10_ind, point_13_ind, point_14_ind;
-    int child_0_left_nbr_ind   = -1;
-    int child_0_right_nbr_ind  = -1;
-    int child_0_bottom_nbr_ind = -1;
-    int child_1_left_nbr_ind   = -1;
-    int child_1_right_nbr_ind  = -1;
-    int child_1_top_nbr_ind    = -1;
+    auto make_point = [&](double px, double pv) -> int {
+        new_xs.push_back(px); new_ps.push_back(pv);
+        return new_vert_ind++;
+    };
+    auto edge_point = [&](int edge, double target,
+                          double px, double pv, int& found) -> int {
+        int ind = lookup_edge_point(jj, edge, target, found);
+        return (ind >= 0) ? ind : make_point(px, pv);
+    };
+    auto child_nbr = [](int parent_slot, int found) -> int {
+        return (parent_slot == -2) ? -2 : found;
+    };
 
-    // ---- LEFT edge (live): needs the neighbour refined in v -------------
-    if (panel->left_nbr_ind == -2) {
-        child_0_left_nbr_ind = -2;
-        child_1_left_nbr_ind = -2;
-        point_9_ind  = new_vert_ind++;
-        point_10_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else if (panel->left_nbr_ind == -1) {
-        flag_v_refinement(panels[panel->parent_ind].left_nbr_ind, true);
-        point_9_ind  = new_vert_ind++;
-        point_10_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else {
-        Panel* panel_left = &(panels[panel->left_nbr_ind]);
-        if (! panel_left->refined_in_v()) {
-            point_9_ind  = new_vert_ind++;
-            point_10_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-            new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            if (panel->left_nbr_ind == jj) {   // self-neighbour (1 panel in x, periodic)
-                child_0_left_nbr_ind = num_new_panels;
-                child_1_left_nbr_ind = num_new_panels + 1;
-            }
-        } else {
-            int cs = panel_left->child_inds_start;
-            child_0_left_nbr_ind = panel_left->is_refined_xp ? cs + 2 : cs + 0;
-            child_1_left_nbr_ind = panel_left->is_refined_xp ? cs + 3 : cs + 1;
-            panels[child_0_left_nbr_ind].right_nbr_ind = num_new_panels;
-            panels[child_1_left_nbr_ind].right_nbr_ind = num_new_panels + 1;
-            if (panel->is_left_bdry && bcs == periodic_bcs) {
-                point_9_ind  = new_vert_ind++;
-                point_10_ind = new_vert_ind++;
-                new_xs.push_back(subpanel_xs[0]); new_xs.push_back(subpanel_xs[0]);
-                new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            } else {
-                point_9_ind  = panels[child_0_left_nbr_ind].point_inds[7];
-                point_10_ind = panels[child_1_left_nbr_ind].point_inds[7];
-            }
-        }
-    }
+    int fL0 = -1, fL1 = -1, fR0 = -1, fR1 = -1;
+    int pL0 = edge_point(EDGE_LEFT,  q1, x0, q1, fL0);
+    int pL1 = edge_point(EDGE_LEFT,  q3, x0, q3, fL1);
+    int pR0 = edge_point(EDGE_RIGHT, q1, x1, q1, fR0);
+    int pR1 = edge_point(EDGE_RIGHT, q3, x1, q3, fR1);
 
-    // ---- RIGHT edge (live): needs the neighbour refined in v ------------
-    if (panel->right_nbr_ind == -2) {
-        child_0_right_nbr_ind = -2;
-        child_1_right_nbr_ind = -2;
-        point_13_ind = new_vert_ind++;
-        point_14_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else if (panel->right_nbr_ind == -1) {
-        flag_v_refinement(panels[panel->parent_ind].right_nbr_ind, false);
-        point_13_ind = new_vert_ind++;
-        point_14_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-        new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-    } else {
-        Panel* panel_right = &(panels[panel->right_nbr_ind]);
-        if (! panel_right->refined_in_v()) {
-            point_13_ind = new_vert_ind++;
-            point_14_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-            new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            if (panel->right_nbr_ind == jj) {   // self-neighbour
-                child_0_right_nbr_ind = num_new_panels;
-                child_1_right_nbr_ind = num_new_panels + 1;
-            }
-        } else {
-            int cs = panel_right->child_inds_start;
-            child_0_right_nbr_ind = cs + 0;
-            child_1_right_nbr_ind = cs + 1;
-            panels[child_0_right_nbr_ind].left_nbr_ind = num_new_panels;
-            panels[child_1_right_nbr_ind].left_nbr_ind = num_new_panels + 1;
-            if (panel->is_right_bdry && bcs == periodic_bcs) {
-                point_13_ind = new_vert_ind++;
-                point_14_ind = new_vert_ind++;
-                new_xs.push_back(subpanel_xs[4]); new_xs.push_back(subpanel_xs[4]);
-                new_ps.push_back(subpanel_ps[1]); new_ps.push_back(subpanel_ps[3]);
-            } else {
-                point_13_ind = panels[child_0_right_nbr_ind].point_inds[1];
-                point_14_ind = panels[child_1_right_nbr_ind].point_inds[1];
-            }
-        }
-    }
+    int pC0 = make_point(xm, q1);   // interior: the children's centres
+    int pC1 = make_point(xm, q3);
 
-    // ---- BOTTOM edge (quiet): no new points, pointer only ---------------
-    // A v-split does not subdivide the bottom edge, so child 0 simply
-    // inherits the parent's bottom neighbour (descending one level if that
-    // neighbour is itself v-refined).  If the neighbour is refined in x,
-    // two of its children abut this edge and a single pointer cannot
-    // express that, so we leave -1 and let it resolve on a later pass.
-    if (panel->bottom_nbr_ind == -2) {
-        child_0_bottom_nbr_ind = -2;
-    } else if (panel->bottom_nbr_ind == -1) {
-        child_0_bottom_nbr_ind = -1;
-    } else {
-        Panel* panel_bottom = &(panels[panel->bottom_nbr_ind]);
-        if (panel_bottom->refined_in_x()) {
-            child_0_bottom_nbr_ind = -1;
-        } else if (panel_bottom->is_refined_p) {
-            child_0_bottom_nbr_ind = panel_bottom->child_inds_start + 1;  // its top child
-            panels[child_0_bottom_nbr_ind].top_nbr_ind = num_new_panels;
-        } else {                                                          // leaf
-            child_0_bottom_nbr_ind = panel->bottom_nbr_ind;
-            panels[child_0_bottom_nbr_ind].top_nbr_ind = num_new_panels;
-        }
-    }
+    int c0L = child_nbr(nbrL, fL0), c1L = child_nbr(nbrL, fL1);
+    int c0R = child_nbr(nbrR, fR0), c1R = child_nbr(nbrR, fR1);
+    if (nbrL == jj) { c0L = c0; c1L = c1; }
+    if (nbrR == jj) { c0R = c0; c1R = c1; }
 
-    // ---- TOP edge (quiet) -----------------------------------------------
-    if (panel->top_nbr_ind == -2) {
-        child_1_top_nbr_ind = -2;
-    } else if (panel->top_nbr_ind == -1) {
-        child_1_top_nbr_ind = -1;
-    } else {
-        Panel* panel_top = &(panels[panel->top_nbr_ind]);
-        if (panel_top->refined_in_x()) {
-            child_1_top_nbr_ind = -1;
-        } else if (panel_top->is_refined_p) {
-            child_1_top_nbr_ind = panel_top->child_inds_start + 0;        // its bottom child
-            panels[child_1_top_nbr_ind].bottom_nbr_ind = num_new_panels + 1;
-        } else {                                                          // leaf
-            child_1_top_nbr_ind = panel->top_nbr_ind;
-            panels[child_1_top_nbr_ind].bottom_nbr_ind = num_new_panels + 1;
-        }
-    }
+    // quiet edges: the child's bottom edge IS the parent's bottom edge,
+    // same extent in x, so the parent's pointer is still exactly right --
+    // including when the neighbour is refined further, which the leaf
+    // search resolves by descending.
+    const int c0B = nbrB;
+    const int c1T = nbrT;
 
-    // ---- interior points: the two children's centres ---------------------
-    int point_11_ind = new_vert_ind;
-    for (int ii = 0; ii < 2; ++ii) {
-        new_xs.push_back(subpanel_xs[2]);
-        new_ps.push_back(subpanel_ps[1 + 2*ii]);
-    }
-    new_vert_ind += 2;
+    panels.push_back(Panel {c0, child_level, panel_ind, 0,
+            pi[0], pL0, pi[1],
+            pi[3], pC0, pi[4],
+            pi[6], pR0, pi[7],
+            c0L, c1, c0R, c0B,
+            p_left_bdry, p_right_bdry});
+    panels.push_back(Panel {c1, child_level, panel_ind, 1,
+            pi[1], pL1, pi[2],
+            pi[4], pC1, pi[5],
+            pi[7], pR1, pi[8],
+            c1L, c1T, c1R, c0,
+            p_left_bdry, p_right_bdry});
+
+    if (fL0 >= 0) { panels[fL0].right_nbr_ind = c0; }
+    if (fL1 >= 0) { panels[fL1].right_nbr_ind = c1; }
+    if (fR0 >= 0) { panels[fR0].left_nbr_ind  = c0; }
+    if (fR1 >= 0) { panels[fR1].left_nbr_ind  = c1; }
+    if (nbrB >= 0 && nbrB != jj) { panels[nbrB].top_nbr_ind    = c0; }
+    if (nbrT >= 0 && nbrT != jj) { panels[nbrT].bottom_nbr_ind = c1; }
 
     if (do_adaptive_refine) {
-        for (int ii = num_new_panels; ii < num_new_panels + 2; ++ii) {
-            prospective_leaf_inds.push_back(ii);
-        }
+        prospective_leaf_inds.push_back(c0);
+        prospective_leaf_inds.push_back(c1);
     }
     bool refining_in_p = true;
-    panel->set_child_inds_start(num_new_panels, refining_in_p);
-
-    int child_level = panel->level + 1;
-    int panel_ind   = panel->panel_ind;
-    int point_inds[9];
-    for (int ii = 0; ii < 9; ++ii) { point_inds[ii] = panel->point_inds[ii]; }
-    bool p_is_left_bdry  = panel->is_left_bdry;
-    bool p_is_right_bdry = panel->is_right_bdry;
-
-    // child 0 : bottom half, rows 0 -> 1 of the parent
-    panels.push_back(Panel {num_new_panels, child_level, panel_ind, 0,
-            point_inds[0], point_9_ind,  point_inds[1],
-            point_inds[3], point_11_ind, point_inds[4],
-            point_inds[6], point_13_ind, point_inds[7],
-            child_0_left_nbr_ind, num_new_panels + 1,
-            child_0_right_nbr_ind, child_0_bottom_nbr_ind,
-            p_is_left_bdry, p_is_right_bdry});
-    // child 1 : top half, rows 1 -> 2 of the parent
-    panels.push_back(Panel {num_new_panels+1, child_level, panel_ind, 1,
-            point_inds[1], point_10_ind,    point_inds[2],
-            point_inds[4], point_11_ind+1,  point_inds[5],
-            point_inds[7], point_14_ind,    point_inds[8],
-            child_1_left_nbr_ind, child_1_top_nbr_ind,
-            child_1_right_nbr_ind, num_new_panels,
-            p_is_left_bdry, p_is_right_bdry});
+    panels[jj].set_child_inds_start(c0, refining_in_p);
 }
 
 
 // ---------------------------------------------------------------------
-//  Split a panel in x only -> 2 children, [0] = left, [1] = right.
-//  Adds 6 points: 2 on the bottom edge, 2 on the top edge, 2 interior
-//  (the two children's centres).  Left and right are quiet edges.
-//  There is no periodic special case here: v is not periodic, so the
-//  v-domain boundaries are plain -2.
+//  Split in x -> 2 children, [0]=left [1]=right.
+//  Live edges: bottom, top.   Quiet edges: left, right.
 // ---------------------------------------------------------------------
 void AMRStructure::refine_one_x(int jj,
                                 std::vector<double>& new_xs,
@@ -1064,195 +823,81 @@ void AMRStructure::refine_one_x(int jj,
                                 std::vector<int>& prospective_leaf_inds,
                                 bool do_adaptive_refine)
 {
-    Panel* panel = &(panels[jj]);
+    int pi[9];
+    for (int ii = 0; ii < 9; ++ii) { pi[ii] = panels[jj].point_inds[ii]; }
+    const double x0 = xs[pi[0]], xm = xs[pi[3]], x1 = xs[pi[6]];
+    const double v0 = ps[pi[0]], vm = ps[pi[1]], v1 = ps[pi[2]];
+    const double m1 = 0.5 * (x0 + xm), m3 = 0.5 * (xm + x1);
 
-    double panel_xs[9], panel_ps[9];
-    for (int ii = 0; ii < 9; ++ii) {
-        int point_ind = panel->point_inds[ii];
-        panel_xs[ii] = xs[point_ind];
-        panel_ps[ii] = ps[point_ind];
-    }
-    double dx = panel_xs[3] - panel_xs[0];
-    double dp = panel_ps[1] - panel_ps[0];
-    double sub_dx = 0.5 * dx;
-    double sub_dp = 0.5 * dp;
+    const int nbrL = panels[jj].left_nbr_ind;
+    const int nbrR = panels[jj].right_nbr_ind;
+    const int nbrB = panels[jj].bottom_nbr_ind;
+    const int nbrT = panels[jj].top_nbr_ind;
+    const bool p_left_bdry  = panels[jj].is_left_bdry;
+    const bool p_right_bdry = panels[jj].is_right_bdry;
+    const int child_level   = panels[jj].level + 1;
+    const int panel_ind     = panels[jj].panel_ind;
 
-    int num_new_panels = panels.size();
-    double subpanel_xs[5], subpanel_ps[5];
-    for (int ii = 0; ii < 5; ++ii) {
-        subpanel_xs[ii] = panel_xs[0] + sub_dx * ii;
-        subpanel_ps[ii] = panel_ps[0] + sub_dp * ii;
-    }
-    //   2 --- t_l --- 5 --- t_r --- 8      t_l, t_r : new, top edge
-    //
-    //   1 --- c_l --- 4 --- c_r --- 7      c_l, c_r : new, children's centres
-    //
-    //   0 --- b_l --- 3 --- b_r --- 6      b_l, b_r : new, bottom edge
-    //                 ^
-    //             split line, points already exist
+    const int c0 = (int) panels.size(), c1 = c0 + 1;
 
-    int point_bl_ind, point_br_ind, point_tl_ind, point_tr_ind;
-    int child_0_left_nbr_ind   = -1;
-    int child_0_bottom_nbr_ind = -1;
-    int child_0_top_nbr_ind    = -1;
-    int child_1_right_nbr_ind  = -1;
-    int child_1_bottom_nbr_ind = -1;
-    int child_1_top_nbr_ind    = -1;
+    auto make_point = [&](double px, double pv) -> int {
+        new_xs.push_back(px); new_ps.push_back(pv);
+        return new_vert_ind++;
+    };
+    auto edge_point = [&](int edge, double target,
+                          double px, double pv, int& found) -> int {
+        int ind = lookup_edge_point(jj, edge, target, found);
+        return (ind >= 0) ? ind : make_point(px, pv);
+    };
+    auto child_nbr = [](int parent_slot, int found) -> int {
+        return (parent_slot == -2) ? -2 : found;
+    };
 
-    // ---- BOTTOM edge (live): needs the neighbour refined in x -----------
-    if (panel->bottom_nbr_ind == -2) {
-        child_0_bottom_nbr_ind = -2;
-        child_1_bottom_nbr_ind = -2;
-        point_bl_ind = new_vert_ind++;
-        point_br_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-    } else if (panel->bottom_nbr_ind == -1) {
-        flag_x_refinement(panels[panel->parent_ind].bottom_nbr_ind, true);
-        point_bl_ind = new_vert_ind++;
-        point_br_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-    } else {
-        Panel* panel_bottom = &(panels[panel->bottom_nbr_ind]);
-        if (! panel_bottom->refined_in_x()) {
-            point_bl_ind = new_vert_ind++;
-            point_br_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-            new_ps.push_back(subpanel_ps[0]); new_ps.push_back(subpanel_ps[0]);
-        } else {
-            int cs = panel_bottom->child_inds_start;
-            child_0_bottom_nbr_ind = panel_bottom->is_refined_xp ? cs + 1 : cs + 0;
-            child_1_bottom_nbr_ind = panel_bottom->is_refined_xp ? cs + 3 : cs + 1;
-            panels[child_0_bottom_nbr_ind].top_nbr_ind = num_new_panels;
-            panels[child_1_bottom_nbr_ind].top_nbr_ind = num_new_panels + 1;
-            point_bl_ind = panels[child_0_bottom_nbr_ind].point_inds[5];
-            point_br_ind = panels[child_1_bottom_nbr_ind].point_inds[5];
-        }
-    }
+    int fB0 = -1, fB1 = -1, fT0 = -1, fT1 = -1;
+    int pB0 = edge_point(EDGE_BOTTOM, m1, m1, v0, fB0);
+    int pB1 = edge_point(EDGE_BOTTOM, m3, m3, v0, fB1);
+    int pT0 = edge_point(EDGE_TOP,    m1, m1, v1, fT0);
+    int pT1 = edge_point(EDGE_TOP,    m3, m3, v1, fT1);
 
-    // ---- TOP edge (live): needs the neighbour refined in x --------------
-    if (panel->top_nbr_ind == -2) {
-        child_0_top_nbr_ind = -2;
-        child_1_top_nbr_ind = -2;
-        point_tl_ind = new_vert_ind++;
-        point_tr_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-    } else if (panel->top_nbr_ind == -1) {
-        flag_x_refinement(panels[panel->parent_ind].top_nbr_ind, false);
-        point_tl_ind = new_vert_ind++;
-        point_tr_ind = new_vert_ind++;
-        new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-        new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-    } else {
-        Panel* panel_top = &(panels[panel->top_nbr_ind]);
-        if (! panel_top->refined_in_x()) {
-            point_tl_ind = new_vert_ind++;
-            point_tr_ind = new_vert_ind++;
-            new_xs.push_back(subpanel_xs[1]); new_xs.push_back(subpanel_xs[3]);
-            new_ps.push_back(subpanel_ps[4]); new_ps.push_back(subpanel_ps[4]);
-        } else {
-            int cs = panel_top->child_inds_start;
-            child_0_top_nbr_ind = cs + 0;
-            child_1_top_nbr_ind = panel_top->is_refined_xp ? cs + 2 : cs + 1;
-            panels[child_0_top_nbr_ind].bottom_nbr_ind = num_new_panels;
-            panels[child_1_top_nbr_ind].bottom_nbr_ind = num_new_panels + 1;
-            point_tl_ind = panels[child_0_top_nbr_ind].point_inds[3];
-            point_tr_ind = panels[child_1_top_nbr_ind].point_inds[3];
-        }
-    }
+    int pM0 = make_point(m1, vm);   // interior: the children's centres
+    int pM1 = make_point(m3, vm);
 
-    // ---- LEFT edge (quiet) ----------------------------------------------
-    // An x-split does not subdivide the left edge, so child 0 inherits the
-    // parent's left neighbour, descending one level if that neighbour is
-    // itself x-refined.  If it is refined in v, two of its children abut
-    // and we leave -1.
-    if (panel->left_nbr_ind == -2) {
-        child_0_left_nbr_ind = -2;
-    } else if (panel->left_nbr_ind == -1) {
-        child_0_left_nbr_ind = -1;
-    } else if (panel->left_nbr_ind == jj) {   // self-neighbour (1 panel in x, periodic)
-        child_0_left_nbr_ind = num_new_panels + 1;
-    } else {
-        Panel* panel_left = &(panels[panel->left_nbr_ind]);
-        if (panel_left->refined_in_v()) {
-            child_0_left_nbr_ind = -1;
-        } else if (panel_left->is_refined_x) {
-            child_0_left_nbr_ind = panel_left->child_inds_start + 1;      // its right child
-            panels[child_0_left_nbr_ind].right_nbr_ind = num_new_panels;
-        } else {                                                          // leaf
-            child_0_left_nbr_ind = panel->left_nbr_ind;
-            panels[child_0_left_nbr_ind].right_nbr_ind = num_new_panels;
-        }
-    }
+    int c0B = child_nbr(nbrB, fB0), c1B = child_nbr(nbrB, fB1);
+    int c0T = child_nbr(nbrT, fT0), c1T = child_nbr(nbrT, fT1);
 
-    // ---- RIGHT edge (quiet) ---------------------------------------------
-    if (panel->right_nbr_ind == -2) {
-        child_1_right_nbr_ind = -2;
-    } else if (panel->right_nbr_ind == -1) {
-        child_1_right_nbr_ind = -1;
-    } else if (panel->right_nbr_ind == jj) {  // self-neighbour
-        child_1_right_nbr_ind = num_new_panels;
-    } else {
-        Panel* panel_right = &(panels[panel->right_nbr_ind]);
-        if (panel_right->refined_in_v()) {
-            child_1_right_nbr_ind = -1;
-        } else if (panel_right->is_refined_x) {
-            child_1_right_nbr_ind = panel_right->child_inds_start + 0;    // its left child
-            panels[child_1_right_nbr_ind].left_nbr_ind = num_new_panels + 1;
-        } else {                                                          // leaf
-            child_1_right_nbr_ind = panel->right_nbr_ind;
-            panels[child_1_right_nbr_ind].left_nbr_ind = num_new_panels + 1;
-        }
-    }
+    // quiet edges: inherit verbatim
+    int c0L = nbrL;
+    int c1R = nbrR;
+    if (nbrL == jj) { c0L = c1; }   // periodic, one panel across x
+    if (nbrR == jj) { c1R = c0; }
 
-    // ---- interior points: the two children's centres ---------------------
-    int point_cl_ind = new_vert_ind;
-    new_xs.push_back(subpanel_xs[1]); new_ps.push_back(subpanel_ps[2]);
-    new_xs.push_back(subpanel_xs[3]); new_ps.push_back(subpanel_ps[2]);
-    new_vert_ind += 2;
+    panels.push_back(Panel {c0, child_level, panel_ind, 0,
+            pi[0], pi[1], pi[2],
+            pB0,   pM0,   pT0,
+            pi[3], pi[4], pi[5],
+            c0L, c0T, c1, c0B,
+            p_left_bdry, false});
+    panels.push_back(Panel {c1, child_level, panel_ind, 1,
+            pi[3], pi[4], pi[5],
+            pB1,   pM1,   pT1,
+            pi[6], pi[7], pi[8],
+            c0, c1T, c1R, c1B,
+            false, p_right_bdry});
+
+    if (fB0 >= 0) { panels[fB0].top_nbr_ind    = c0; }
+    if (fB1 >= 0) { panels[fB1].top_nbr_ind    = c1; }
+    if (fT0 >= 0) { panels[fT0].bottom_nbr_ind = c0; }
+    if (fT1 >= 0) { panels[fT1].bottom_nbr_ind = c1; }
+    if (nbrL >= 0 && nbrL != jj) { panels[nbrL].right_nbr_ind = c0; }
+    if (nbrR >= 0 && nbrR != jj) { panels[nbrR].left_nbr_ind  = c1; }
 
     if (do_adaptive_refine) {
-        for (int ii = num_new_panels; ii < num_new_panels + 2; ++ii) {
-            prospective_leaf_inds.push_back(ii);
-        }
+        prospective_leaf_inds.push_back(c0);
+        prospective_leaf_inds.push_back(c1);
     }
-    panel->set_child_inds_start_x(num_new_panels);
-
-    int child_level = panel->level + 1;
-    int panel_ind   = panel->panel_ind;
-    int point_inds[9];
-    for (int ii = 0; ii < 9; ++ii) { point_inds[ii] = panel->point_inds[ii]; }
-    bool p_is_left_bdry  = panel->is_left_bdry;
-    bool p_is_right_bdry = panel->is_right_bdry;
-
-    // child 0 : left half, columns 0 -> 1 of the parent
-    panels.push_back(Panel {num_new_panels, child_level, panel_ind, 0,
-            point_inds[0], point_inds[1],  point_inds[2],
-            point_bl_ind,  point_cl_ind,   point_tl_ind,
-            point_inds[3], point_inds[4],  point_inds[5],
-            child_0_left_nbr_ind, child_0_top_nbr_ind,
-            num_new_panels + 1, child_0_bottom_nbr_ind,
-            p_is_left_bdry, false});
-    // child 1 : right half, columns 1 -> 2 of the parent
-    panels.push_back(Panel {num_new_panels+1, child_level, panel_ind, 1,
-            point_inds[3], point_inds[4],  point_inds[5],
-            point_br_ind,  point_cl_ind+1, point_tr_ind,
-            point_inds[6], point_inds[7],  point_inds[8],
-            num_new_panels, child_1_top_nbr_ind,
-            child_1_right_nbr_ind, child_1_bottom_nbr_ind,
-            false, p_is_right_bdry});
+    panels[jj].set_child_inds_start_x(c0);
 }
 
-
-// ---------------------------------------------------------------------
-//  Sweep the panel list once, dispatching each flagged panel to the
-//  routine matching its requested direction.  The staging buffers and the
-//  `new_vert_ind` counter live here so the invariant
-//      one new_vert_ind++  <->  one new_xs/new_ps push_back, same order
-//  is maintained in a single place.
-// ---------------------------------------------------------------------
 void AMRStructure::refine_panels(std::function<double (double,double)> f, bool do_adaptive_refine) {
     std::vector <double> new_xs;
     std::vector <double> new_ps;
@@ -1260,6 +905,11 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
     std::vector <int> prospective_leaf_inds;
     int new_vert_ind = xs.size();
     int num_panels_before_this_iter = panels.size();
+
+    // Points created during this sweep live in new_xs/new_ps until the end,
+    // so the edge lookup needs to be able to see them.
+    staged_xs = &new_xs;
+    staged_ps = &new_ps;
 
     for (int jj = minimum_unrefined_index; jj < num_panels_before_this_iter; ++jj) {
         if (! panels[jj].needs_refinement) { continue; }
@@ -1288,6 +938,8 @@ void AMRStructure::refine_panels(std::function<double (double,double)> f, bool d
     for (int ii = 0; ii < new_xs.size(); ++ii) {
         xs.push_back(new_xs[ii]); ps.push_back(new_ps[ii]); fs.push_back(new_fs[ii]);
     }
+    staged_xs = nullptr;
+    staged_ps = nullptr;
 }
 
 void AMRStructure::generate_mesh(std::function<double (double,double)> f, 
@@ -1414,6 +1066,24 @@ void AMRStructure::generate_mesh(std::function<double (double,double)> f,
 
     set_leaves_weights();
 
+    { // Optional diagnostic -- delete freely.  Prints the split-type mix
+      // and the point count each remesh.  Point-count growth is the signal
+      // for how often the edge lookup is falling back to creating a point.
+        int n_xv = 0, n_x = 0, n_v = 0, n_leaf = 0;
+        for (size_t ii = 0; ii < panels.size(); ++ii) {
+            if      (panels[ii].is_refined_xp) { ++n_xv; }
+            else if (panels[ii].is_refined_x)  { ++n_x;  }
+            else if (panels[ii].is_refined_p)  { ++n_v;  }
+            else                               { ++n_leaf; }
+        }
+        std::cout << "[AMR] panels=" << panels.size()
+                  << "  xv-split=" << n_xv
+                  << "  x-split=" << n_x
+                  << "  v-split=" << n_v
+                  << "  leaves=" << n_leaf
+                  << "  points=" << xs.size() << std::endl;
+    }
+
     Q0 = 0;
     for (int ii = 0; ii < q_ws.size(); ii++) {
         Q0 += q_ws[ii];
@@ -1434,10 +1104,26 @@ void AMRStructure::generate_mesh(std::function<double (double,double)> f,
 // ---------------------------------------------------------------------
 void AMRStructure::test_panel(int panel_ind, bool verbose) {
 
-    double panel_fs[9];
+    // The refinement indicator is the background-subtracted distribution
+    //     df = f - f_M(p)
+    // not f itself.  Applied to full f, the equilibrium slope df_M/dp
+    // dominates every panel in the bulk and the criterion saturates: at
+    // t = 0 it either flags everything or, once normalised, flags the
+    // tails preferentially -- neither of which tracks the perturbation
+    // that the simulation is actually resolving.
+    //
+    // panel_fb keeps the background itself, because it is the natural
+    // scale for the relative criterion below.
+    double panel_fs[9];   // full f, kept for the interpolation-trouble check
+    double panel_fb[9];   // f_M(p), the control variate
+    double panel_df[9];   // f - f_M, the indicator
     auto panel_it = panels.begin() + panel_ind;
     for (int ii = 0; ii < 9; ++ii) {
-        panel_fs[ii] = fs[panel_it->point_inds[ii]];
+        int pind = panel_it->point_inds[ii];
+        double fb = (f0 != nullptr) ? f0->background(ps[pind]) : 0.0;
+        panel_fs[ii] = fs[pind];
+        panel_fb[ii] = fb;
+        panel_df[ii] = fs[pind] - fb;
     }
 
     // Points are stored column-major, index = 3*i + j, i the x-column and
@@ -1451,20 +1137,20 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
     double var_v = 0.0;   // largest range along v, taken over the three columns
 
     for (int jj = 0; jj < 3; ++jj) {
-        double hi = panel_fs[jj], lo = panel_fs[jj];
+        double hi = panel_df[jj], lo = panel_df[jj];
         for (int ii = 1; ii < 3; ++ii) {
-            double fij = panel_fs[3*ii + jj];
-            if (fij > hi) { hi = fij; }
-            if (fij < lo) { lo = fij; }
+            double dij = panel_df[3*ii + jj];
+            if (dij > hi) { hi = dij; }
+            if (dij < lo) { lo = dij; }
         }
         if (hi - lo > var_x) { var_x = hi - lo; }
     }
     for (int ii = 0; ii < 3; ++ii) {
-        double hi = panel_fs[3*ii], lo = panel_fs[3*ii];
+        double hi = panel_df[3*ii], lo = panel_df[3*ii];
         for (int jj = 1; jj < 3; ++jj) {
-            double fij = panel_fs[3*ii + jj];
-            if (fij > hi) { hi = fij; }
-            if (fij < lo) { lo = fij; }
+            double dij = panel_df[3*ii + jj];
+            if (dij > hi) { hi = dij; }
+            if (dij < lo) { lo = dij; }
         }
         if (hi - lo > var_v) { var_v = hi - lo; }
     }
@@ -1485,16 +1171,29 @@ void AMRStructure::test_panel(int panel_ind, bool verbose) {
         cout << endl;
     }
 
+    //   amr_epsilons = [eps_x, eps_v, eps_rel]
+    //
+    // Absolute thresholds on the range of df along each direction, then the
+    // relative test in exactly the form used previously:
+    //
+    //     range > rtol * f_ref,     f_ref = max(|max df|, |min df|)
+    //
+    // written as a product so there is no division to guard.  It is also
+    // self-guarding: f_ref == 0 only when every df on the panel is zero, in
+    // which case var_x = var_v = 0 and nothing fires.
     bool refine_x = false;
     bool refine_v = false;
     if (amr_epsilons.size() > 0) { refine_x = (var_x > amr_epsilons[0]); }
     if (amr_epsilons.size() > 1) { refine_v = (var_v > amr_epsilons[1]); }
-    if (amr_epsilons.size() > 2 && amr_epsilons[2] > 0.0) {
-        double denom = fabs(panel_fs[4]);
-        if (denom > 0.0) {
-            refine_x = refine_x || (var_x / denom > amr_epsilons[2]);
-            refine_v = refine_v || (var_v / denom > amr_epsilons[2]);
+    if (amr_epsilons.size() > 2) {
+        double max_df = panel_df[0], min_df = panel_df[0];
+        for (int ii = 1; ii < 9; ++ii) {
+            if (panel_df[ii] > max_df) { max_df = panel_df[ii]; }
+            if (panel_df[ii] < min_df) { min_df = panel_df[ii]; }
         }
+        const double f_ref = std::max(std::fabs(max_df), std::fabs(min_df));
+        refine_x = refine_x || (var_x > amr_epsilons[2] * f_ref);
+        refine_v = refine_v || (var_v > amr_epsilons[2] * f_ref);
     }
 
     if (panel_it->level < max_height && (refine_x || refine_v)) {
